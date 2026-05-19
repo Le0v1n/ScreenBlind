@@ -686,7 +686,7 @@ class ScreensaverTab(QWidget):
 
 APP_VERSION = "1.0.0"
 WEBSITE_URL = "https://screenblind.cc"
-DONATE_URL  = "https://screenblind.cc/donate"   # placeholder — replace with direct donation link
+DONATE_URL  = "https://www.paypal.com/donate/?hosted_button_id=ZXKFFGA7W6Y5E"
 
 
 class AboutTab(QWidget):

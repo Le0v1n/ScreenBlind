@@ -150,10 +150,9 @@ ScreenBlind/
 ScreenBlind is free and will stay free. If it saves you from someone peeking
 at your monitor during a coffee run, consider supporting development.
 
-> 💛 **Donation links coming soon** — payment provider details will be added
-> here and on the [website](https://screenblind.cc/donate) shortly.
+**☕ [Donate via PayPal](https://www.paypal.com/donate/?hosted_button_id=ZXKFFGA7W6Y5E)** — any amount welcome.
 
-In the meantime:
+Other free ways to help:
 
 - ⭐ Star this repo
 - 🐛 Open issues for bugs you find
