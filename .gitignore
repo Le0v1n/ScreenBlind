@@ -1,0 +1,98 @@
+# ============================================================================
+# Python
+# ============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.so
+
+# ============================================================================
+# Virtual environments
+# ============================================================================
+venv/
+.venv/
+env/
+ENV/
+pyvenv.cfg
+
+# ============================================================================
+# Packaging / distribution
+# ============================================================================
+*.egg-info/
+*.egg
+.eggs/
+build/
+dist/
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ============================================================================
+# Testing / linting caches
+# ============================================================================
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+pyrightconfig.json
+
+# ============================================================================
+# IDEs / editors
+# ============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+.spyderproject
+.spyproject
+.ropeproject
+
+# ============================================================================
+# OS junk
+# ============================================================================
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+desktop.ini
+$RECYCLE.BIN/
+
+# ============================================================================
+# Logs, temp, secrets
+# ============================================================================
+*.log
+*.tmp
+*.temp
+*.bak
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+
+# ============================================================================
+# Project-specific
+# ============================================================================
+# Landing-page source is maintained in a separate (private) build pipeline.
+website/
+resize_assets.py
+
+# Per-user runtime config lives in %APPDATA%\ScreenBlind\ — never in the repo,
+# but list common stray copies as a safety net.
+settings.json
+*.session
