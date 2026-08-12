@@ -6,7 +6,8 @@ DEFAULTS: dict = {
     "password_hash": "",
     "locked_screens": [],
     "idle_timeout": 120,          # seconds before screensaver starts
-    "screensaver_type": "bubbles",  # "bubbles" | "matrix" | "slideshow" | "none"
+    # "bubbles" | "matrix" | "flurry" | "slideshow" | "none"
+    "screensaver_type": "bubbles",
     "slideshow_folder": "",
     "slideshow_interval": 5,      # seconds per image
 }

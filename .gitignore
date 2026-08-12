@@ -27,6 +27,9 @@ build/
 dist/
 *.manifest
 *.spec
+# ...except ours: build.bat builds from it, and it carries the Per-Monitor V2
+# DPI manifest the app needs. Without it a fresh clone cannot build correctly.
+!ScreenBlind.spec
 pip-log.txt
 pip-delete-this-directory.txt
 

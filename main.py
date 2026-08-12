@@ -43,6 +43,7 @@ from PyQt6.QtWidgets import (
 )
 
 import auth
+import dpi
 import settings as cfg_mod
 from blind import BlindManager
 
@@ -52,11 +53,16 @@ from blind import BlindManager
 # ---------------------------------------------------------------------------
 
 STYLE = """
+/* Font sizes are in pt, not px, deliberately. Qt resolves a px font-size by
+   calling setPixelSize(), which leaves pointSize() at -1; its stylesheet code
+   then feeds that -1 back into setPointSize() when building a QComboBox
+   popup, printing "QFont::setPointSize: Point size <= 0 (-1)". Using pt
+   avoids the warning. 0.75pt == 1px at 96 DPI, so rendering is unchanged. */
 QMainWindow, QWidget {
     background-color: #0a0a12;
     color: #ededf5;
     font-family: 'Segoe UI';
-    font-size: 13px;
+    font-size: 9.75pt;
 }
 
 /* --- Tabs --- */
@@ -75,7 +81,7 @@ QTabBar::tab {
     border: none;
     border-bottom: 2px solid transparent;
     margin-right: 2px;
-    font-size: 13px;
+    font-size: 9.75pt;
 }
 QTabBar::tab:selected {
     color: #ededf5;
@@ -93,7 +99,7 @@ QPushButton {
     border: 1px solid #222238;
     padding: 7px 18px;
     border-radius: 6px;
-    font-size: 13px;
+    font-size: 9.75pt;
 }
 QPushButton:hover {
     background-color: #1e1e38;
@@ -106,7 +112,7 @@ QPushButton:pressed {
 QPushButton#lockBtn {
     background-color: #e11d48;
     color: #ffffff;
-    font-size: 15px;
+    font-size: 11.25pt;
     font-weight: 600;
     padding: 14px 40px;
     border-radius: 8px;
@@ -157,7 +163,7 @@ QLabel#aboutDisclaimer {
     border-radius: 8px;
     color: #d4c9a0;
     padding: 12px 16px;
-    font-size: 11px;
+    font-size: 8.25pt;
     line-height: 1.55;
 }
 
@@ -262,7 +268,7 @@ QCheckBox::indicator:checked {
 
 /* --- Labels --- */
 QLabel { color: #ededf5; }
-QLabel[secondary="true"] { color: #44446a; font-size: 11px; }
+QLabel[secondary="true"] { color: #44446a; font-size: 8.25pt; }
 
 /* --- Separator --- */
 QFrame[role="separator"] {
@@ -314,6 +320,21 @@ def _resource_path(*parts: str) -> Path:
     """
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
     return base.joinpath(*parts)
+
+
+def _resolution_text(screen) -> str:
+    """
+    Native resolution of a screen, plus its scaling when it isn't 100%.
+
+    Qt's own geometry is in logical pixels, so a 2560x1440 display at 150%
+    would otherwise be reported as 1707x960 — the wrong-resolution bug.
+    """
+    w, h = dpi.native_size(screen)
+    scale = dpi.scale_percent(screen)
+    text = f"{w} × {h}"
+    if scale != 100:
+        text += f"  @ {scale}%"
+    return text
 
 
 def _app_icon() -> QIcon:
@@ -375,11 +396,10 @@ class _ScreenIdentifierOverlay(QWidget):
         sub_font.setWeight(QFont.Weight.Medium)
         painter.setFont(sub_font)
         painter.setPen(QColor(165, 180, 252, 200))
-        g = self._screen.geometry()
         painter.drawText(
             rect.adjusted(0, 0, 0, -22),
             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
-            f"{g.width()} × {g.height()}",
+            _resolution_text(self._screen),
         )
 
     def mousePressEvent(self, _event):
@@ -450,12 +470,12 @@ class MonitorsTab(QWidget):
         primary = QApplication.primaryScreen()
 
         for i, screen in enumerate(screens):
-            geo = screen.geometry()
+            native = dpi.native_geometry(screen)
             label = (
                 f"Screen {i + 1}"
                 + (" (Primary)" if screen is primary else "")
-                + f"  —  {geo.width()} × {geo.height()}"
-                + f"  at ({geo.x()}, {geo.y()})"
+                + f"  —  {_resolution_text(screen)}"
+                + f"  at ({native.x()}, {native.y()})"
             )
             item = QListWidgetItem(label)
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
@@ -625,8 +645,8 @@ class ScreensaverTab(QWidget):
         # Animation type
         layout.addWidget(_label("Animation style:"))
         self._anim_combo = QComboBox()
-        self._anim_combo.addItems(["Bubbles", "Matrix", "Image Slideshow", "None"])
-        type_map = {"bubbles": 0, "matrix": 1, "slideshow": 2, "none": 3}
+        self._anim_combo.addItems(["Bubbles", "Matrix", "Flurry", "Image Slideshow", "None"])
+        type_map = {"bubbles": 0, "matrix": 1, "flurry": 2, "slideshow": 3, "none": 4}
         self._anim_combo.setCurrentIndex(type_map.get(cfg.get("screensaver_type", "bubbles"), 0))
         self._anim_combo.currentIndexChanged.connect(self._save_anim)
         layout.addWidget(self._anim_combo)
@@ -664,7 +684,7 @@ class ScreensaverTab(QWidget):
         cfg_mod.save(self._cfg)
 
     def _save_anim(self, idx: int):
-        types = ["bubbles", "matrix", "slideshow", "none"]
+        types = ["bubbles", "matrix", "flurry", "slideshow", "none"]
         self._cfg["screensaver_type"] = types[idx]
         cfg_mod.save(self._cfg)
 
@@ -684,7 +704,7 @@ class ScreensaverTab(QWidget):
 # About tab
 # ---------------------------------------------------------------------------
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 WEBSITE_URL = "https://screenblind.cc"
 DONATE_URL  = "https://www.paypal.com/donate/?hosted_button_id=ZXKFFGA7W6Y5E"
 
@@ -970,6 +990,12 @@ def _show_splash(app: QApplication) -> QSplashScreen | None:
 
 
 def main():
+    # Before anything creates a window: tell Windows we handle scaling
+    # ourselves, so monitor geometry is reported in real pixels instead of
+    # being virtualised down. Without this, blinds on displays scaled above
+    # 100% only cover part of the screen.
+    dpi.enable_dpi_awareness()
+
     app = QApplication(sys.argv)
     app.setApplicationName("ScreenBlind")
     app.setQuitOnLastWindowClosed(False)

@@ -29,7 +29,7 @@ and keyboard input stays captured by the lock; the unlocked monitor is for
 - 🖥️ **Selective locking** — pick exactly which monitors to lock
 - 🔒 **Password-protected** — single password unlocks every locked screen at once
 - 🐭 **Cursor trapping** — mouse can't escape onto unlocked monitors
-- 🎨 **Built-in screensavers** — Bubbles, Matrix rain, or your own image slideshow
+- 🎨 **Built-in screensavers** — Bubbles, Matrix rain, Flurry, or your own image slideshow
 - 🕐 **Roaming clock** — clock and date drift to random positions to keep the lock surface alive
 - 🌌 **Animated background** — dark hues slowly shift across the color wheel
 - 🪶 **Lightweight** — single `.exe`, no installer, no background services, no telemetry
@@ -129,13 +129,27 @@ the attacker now needs both passwords.
 
 Stored as JSON in `%APPDATA%\ScreenBlind\settings.json`.
 
+## Display scaling
+
+ScreenBlind declares itself Per-Monitor-V2 DPI aware and resolves each
+monitor's true pixel bounds from Windows, so blinds cover scaled displays
+edge to edge and the Monitors tab reports native resolution (with the scaling
+factor alongside it, e.g. `2560 × 1440 @ 150%`).
+
+If you previously worked around mis-sized blinds by setting **Properties →
+Compatibility → Change high DPI settings → Override high DPI scaling
+behavior → System (Enhanced)** on `ScreenBlind.exe`, **clear that checkbox**.
+It is no longer needed, and because a compatibility override outranks the
+app's own manifest it will now make things worse rather than better.
+
 ## Project structure
 
 ```
 ScreenBlind/
 ├── main.py              # Entry point + settings UI (Qt)
 ├── blind.py             # Per-screen overlay widget + BlindManager + Win32 helpers
-├── animations.py        # Bubbles / Matrix / Slideshow screensavers
+├── animations.py        # Bubbles / Matrix / Flurry / Slideshow screensavers
+├── dpi.py               # Per-Monitor V2 awareness + logical↔physical geometry
 ├── auth.py              # PBKDF2 password hash + verify
 ├── settings.py          # JSON load/save under %APPDATA%
 ├── generate_icon.py     # Programmatic icon generator

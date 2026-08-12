@@ -29,6 +29,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import QApplication, QWidget
 
 import animations as anim_module
+import dpi
 from auth import verify_password
 
 
@@ -357,7 +358,8 @@ _MODIFIER_KEYS = {
 class BlindOverlay(QWidget):
     def __init__(self, geo: QRect, state: BlindState, cfg: dict):
         super().__init__(None)
-        self._geo = geo
+        self._geo = geo          # Qt logical pixels — for setGeometry()
+        self._phys = QRect(geo)  # physical pixels — for every Win32 call
         self._state = state
         self._cfg = cfg
         self._animation: anim_module.BaseAnimation | None = None
@@ -396,11 +398,32 @@ class BlindOverlay(QWidget):
 
     # -- after show() call this to truly cover the taskbar ------------------
 
+    def sync_native_geometry(self) -> QRect:
+        """
+        Re-read the physical bounds of the monitor this overlay lives on.
+
+        self._geo is in Qt's logical pixels, which on a scaled display are
+        smaller than the real ones — pushing those numbers through SetWindowPos
+        would shrink the blind to a fraction of the monitor. Ask Windows for
+        the monitor's true rect instead. Cheap enough to redo on every topmost
+        tick, which also lets the blind heal itself if the resolution or
+        scaling changes while locked.
+        """
+        rect = dpi.monitor_rect_for_hwnd(int(self.winId()))
+        if rect is not None and rect.isValid():
+            self._phys = rect
+        return self._phys
+
+    @property
+    def native_rect(self) -> QRect:
+        return QRect(self._phys)   # copy: callers keep it to detect changes
+
     def force_topmost(self):
+        self.sync_native_geometry()
         _force_topmost(
             int(self.winId()),
-            self._geo.x(), self._geo.y(),
-            self._geo.width(), self._geo.height(),
+            self._phys.x(), self._phys.y(),
+            self._phys.width(), self._phys.height(),
         )
 
     # -- screensaver ---------------------------------------------------------
@@ -439,8 +462,13 @@ class BlindOverlay(QWidget):
 
         # Screensaver
         if self._state.in_screensaver and self._animation:
+            own_bg = self._animation.background_color()
+            if own_bg is not None:
+                painter.fillRect(rect, own_bg)
             self._animation.draw(painter, rect)
-            painter.fillRect(rect, QColor(0, 0, 0, 70))
+            dim = self._animation.DIM_OVERLAY
+            if dim:
+                painter.fillRect(rect, QColor(0, 0, 0, dim))
 
         # Clock (always visible)
         self._draw_clock(painter, rect)
@@ -652,21 +680,22 @@ class BlindManager(QObject):
             geo = screens[idx].geometry()
             overlay = BlindOverlay(geo, self._state, self._cfg)
             overlay.show()
+            # show() creates the native window, so Windows can now tell us
+            # which monitor it landed on and how big that monitor really is.
+            overlay.sync_native_geometry()
             overlay.force_topmost()
             self._overlays.append(overlay)
-            clip_rects.append(geo)
+            clip_rects.append(overlay.native_rect)
 
         if not self._overlays:
             self._state = None
             return
 
-        # Trap mouse inside the bounding rect of all locked screens
+        # Trap mouse inside the bounding rect of all locked screens.
+        # Physical pixels throughout — that is the space ClipCursor and
+        # GetCursorPos work in.
         self._locked_rects = clip_rects
-        left = min(r.left() for r in clip_rects)
-        top = min(r.top() for r in clip_rects)
-        right = max(r.right() for r in clip_rects)
-        bottom = max(r.bottom() for r in clip_rects)
-        _clip_cursor(left, top, right, bottom)
+        self._apply_cursor_clip()
 
         self._state.start_idle_timer()
         self._topmost_timer.start()
@@ -678,9 +707,28 @@ class BlindManager(QObject):
             self._overlays[0].activateWindow()
             self._overlays[0].setFocus()
 
+    def _apply_cursor_clip(self):
+        if not self._locked_rects:
+            return
+        left = min(r.left() for r in self._locked_rects)
+        top = min(r.top() for r in self._locked_rects)
+        # QRect.right()/bottom() are inclusive, ClipCursor's are exclusive —
+        # without the +1 the cursor can never reach the last row or column.
+        right = max(r.right() for r in self._locked_rects) + 1
+        bottom = max(r.bottom() for r in self._locked_rects) + 1
+        _clip_cursor(left, top, right, bottom)
+
     def _enforce_topmost(self):
         for o in self._overlays:
             o.force_topmost()
+
+        # force_topmost() re-reads each monitor's physical rect, so a
+        # resolution or scaling change made while locked shows up here.
+        # Re-clip only when something actually moved.
+        current = [o.native_rect for o in self._overlays]
+        if current != self._locked_rects:
+            self._locked_rects = current
+            self._apply_cursor_clip()
 
     def _enforce_cursor_clip(self):
         """Snap cursor back to the nearest locked screen if it escaped."""
@@ -695,8 +743,9 @@ class BlindManager(QObject):
         best_x, best_y = x, y
         best_dist = float("inf")
         for r in self._locked_rects:
-            cx = max(r.left(), min(r.right() - 1, x))
-            cy = max(r.top(), min(r.bottom() - 1, y))
+            # right()/bottom() are the last valid pixel, so clamp to them
+            cx = max(r.left(), min(r.right(), x))
+            cy = max(r.top(), min(r.bottom(), y))
             d = (cx - x) * (cx - x) + (cy - y) * (cy - y)
             if d < best_dist:
                 best_dist = d
