@@ -1,6 +1,8 @@
 """Windows global hotkeys, owned by the Qt GUI thread."""
 from __future__ import annotations
 
+from i18n import tr
+
 import ctypes
 from ctypes import wintypes
 from PyQt6.QtCore import QAbstractNativeEventFilter, QTimer, Qt
@@ -12,20 +14,20 @@ def parse_hotkey(text: str) -> tuple[int, int] | None:
         return None
     sequence = QKeySequence(text, QKeySequence.SequenceFormat.PortableText)
     if sequence.count() != 1:
-        raise ValueError("快捷键只能包含一组按键。")
+        raise ValueError(tr('Use a single key combination.'))
     combo = sequence[0]
     mods = combo.keyboardModifiers()
     if mods & Qt.KeyboardModifier.MetaModifier or not mods & (
         Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier
     ):
-        raise ValueError("请使用 Ctrl 或 Alt 作为组合键；不支持 Windows 键。")
+        raise ValueError(tr('Include Ctrl or Alt. The Windows key is not supported.'))
     key = combo.key().value
     if ord('A') <= key <= ord('Z') or ord('0') <= key <= ord('9'):
         vk = key
     elif Qt.Key.Key_F1.value <= key <= Qt.Key.Key_F11.value:
         vk = 0x70 + key - Qt.Key.Key_F1.value
     else:
-        raise ValueError("主键支持 A–Z、0–9 或 F1–F11。")
+        raise ValueError(tr('Use a letter A–Z, digit 0–9 or F1–F11 as the main key.'))
     native_mods = 0x4000  # MOD_NOREPEAT
     for qt_mod, native in ((Qt.KeyboardModifier.ControlModifier, 2),
                            (Qt.KeyboardModifier.AltModifier, 1),
@@ -57,7 +59,7 @@ class GlobalHotkeys(QAbstractNativeEventFilter):
             if binding is None:
                 continue
             if binding in desired:
-                raise ValueError("两个操作不能使用相同的快捷键。")
+                raise ValueError(tr('Two actions cannot use the same hotkey.'))
             desired[binding] = action
         # Acquire new combinations first. On conflict the old set remains active.
         added = {}
@@ -69,7 +71,7 @@ class GlobalHotkeys(QAbstractNativeEventFilter):
                 identifier = next(i for i in range(0x1000, 0x1100) if i not in used)
                 if not self._user32.RegisterHotKey(None, identifier, *binding):
                     action = desired[binding]
-                    raise ValueError(f"快捷键 {shortcuts[action]} 已被占用或无法注册，请换一组按键。")
+                    raise ValueError(tr("The shortcut {shortcut} is in use or could not be registered. Choose another combination.", shortcut=shortcuts[action]))
                 added[binding] = identifier
         except Exception:
             for identifier in added.values():

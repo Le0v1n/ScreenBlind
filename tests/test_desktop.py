@@ -1,11 +1,13 @@
 """Regression tests: run with python -m unittest discover -s tests -v."""
 import ctypes
+import ast
 import os
 from pathlib import Path
 import tempfile
 import unittest
 import uuid
 import winreg
+import string
 from unittest.mock import Mock, patch
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
@@ -19,6 +21,7 @@ import hotkeys
 import main
 import settings
 import startup
+import i18n
 from instance import InstanceGuard
 
 APP = QApplication.instance() or QApplication([])
@@ -110,6 +113,45 @@ class WindowTests(unittest.TestCase):
         for edit in self.window._shortcut_edits.values():
             self.assertTrue(edit.keySequence().isEmpty())
         self.window._hotkeys.configure.assert_called_once_with({'lock': '', 'settings': ''})
+
+    def test_language_switch_updates_ui_and_tray_and_preserves_drafts(self):
+        w = self.window
+        w._security_tab._pw1.setText('draft-only')
+        w._security_tab._pw2.setText('draft-only')
+        w._security_tab._show_cb.setChecked(True)
+        w._shortcut_edits['lock'].setKeySequence(QKeySequence('Ctrl+Alt+B'))
+        w._monitors_tab._items[0][0].setCheckState(Qt.CheckState.Checked)
+        with patch.object(startup, 'set_enabled') as startup_write:
+            for language, tab, action in [('en', 'General', 'Open settings'), ('zh_CN', '通用', '打开设置'), ('en', 'General', 'Open settings')]:
+                w._language_combo.setCurrentIndex(w._language_combo.findData(language))
+                self.assertEqual(w._tabs.tabText(3).strip(), tab)
+                self.assertEqual(w._settings_action.text(), action)
+                self.assertEqual(w._security_tab._pw1.text(), 'draft-only')
+                self.assertEqual(w._security_tab._pw2.text(), 'draft-only')
+                self.assertTrue(w._security_tab._show_cb.isChecked())
+                self.assertEqual(w._shortcut_edits['lock'].keySequence().toString(), 'Ctrl+Alt+B')
+                self.assertEqual(w._monitors_tab.selected_indices(), [0])
+                self.assertEqual(settings.load()['language'], language)
+                self.assertEqual(w._cfg['lock_hotkey'], '')  # Unsaved drafts stay unsaved.
+                self.assertEqual(w._language_combo.currentData(), language)
+            startup_write.assert_not_called()
+
+    def test_saved_language_restores_on_next_launch(self):
+        self.window._language_combo.setCurrentIndex(self.window._language_combo.findData('en'))
+        restored = main.MainWindow()
+        try:
+            self.assertEqual(restored._tabs.tabText(3).strip(), 'General')
+            self.assertEqual(restored._language_combo.currentData(), 'en')
+        finally:
+            restored._tray.hide()
+            restored.deleteLater()
+
+    def test_warning_dialog_uses_selected_language(self):
+        self.window._language_combo.setCurrentIndex(self.window._language_combo.findData('en'))
+        with patch.object(main.QMessageBox, 'warning') as warning:
+            self.window._on_lock_clicked()
+            self.assertEqual(warning.call_args.args[1], 'No password')
+
 
     def test_startup_toggle_and_failure_restore_checkbox(self):
         with patch.object(startup, 'set_enabled') as write:
@@ -355,6 +397,44 @@ class StartupTests(unittest.TestCase):
         with patch.object(startup.sys, 'frozen', True, create=True), \
              patch.object(startup.sys, 'executable', r'C:\My Apps\ScreenBlind.exe'):
             self.assertEqual(startup.startup_command(), '"C:\\My Apps\\ScreenBlind.exe" --startup')
+
+
+class LanguageTests(unittest.TestCase):
+    def tearDown(self):
+        i18n.configure_language(APP, 'system')
+
+    def test_translation_placeholders_match_english_sources(self):
+        formatter = string.Formatter()
+        for english, chinese in i18n.ZH_CN.items():
+            source_fields = {field for _, field, _, _ in formatter.parse(english) if field is not None}
+            translated_fields = {field for _, field, _, _ in formatter.parse(chinese) if field is not None}
+            self.assertEqual(source_fields, translated_fields, english)
+
+    def test_all_application_strings_have_a_chinese_translation(self):
+        root = Path(__file__).resolve().parents[1]
+        for filename in ('main.py', 'blind.py', 'animations.py', 'hotkeys.py', 'instance.py'):
+            for node in ast.walk(ast.parse((root / filename).read_text(encoding='utf-8'))):
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'tr':
+                    self.assertIsInstance(node.args[0], ast.Constant)
+                    self.assertIn(node.args[0].value, i18n.ZH_CN, f'{filename}:{node.lineno}')
+
+    def test_system_language_falls_back_to_english_outside_chinese(self):
+        from PyQt6.QtCore import QLocale
+        with patch.object(i18n.QLocale, 'system', return_value=QLocale('de_DE')):
+            self.assertEqual(i18n.resolve_language('system'), 'en')
+        with patch.object(i18n.QLocale, 'system', return_value=QLocale('zh_CN')):
+            self.assertEqual(i18n.resolve_language('system'), 'zh_CN')
+
+    def test_dynamic_errors_dates_and_formatting_follow_language(self):
+        for language, expected in [('en', 'Display 2'), ('zh_CN', '显示器 2')]:
+            i18n.configure_language(APP, language)
+            self.assertEqual(i18n.tr('Display {number}', number=2), expected)
+        i18n.configure_language(APP, 'en')
+        with self.assertRaisesRegex(ValueError, 'Include Ctrl or Alt'):
+            hotkeys.parse_hotkey('L')
+        i18n.configure_language(APP, 'zh_CN')
+        with self.assertRaisesRegex(ValueError, 'Ctrl 或 Alt'):
+            hotkeys.parse_hotkey('L')
 
 
 if __name__ == '__main__':

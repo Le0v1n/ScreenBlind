@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 DEFAULTS: dict = {
+    "language": "system",       # "system" | "en" | "zh_CN"
     "theme": "dark",
     "lock_hotkey": "",
     "settings_hotkey": "",

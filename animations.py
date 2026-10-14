@@ -3,6 +3,7 @@ import random
 from collections import deque
 from pathlib import Path
 
+from i18n import tr
 from PyQt6.QtCore import QLineF, QObject, QRect, QRectF, QTimer
 from PyQt6.QtGui import (
     QBrush,
@@ -508,7 +509,7 @@ class SlideshowAnimation(BaseAnimation):
             font = QFont("Segoe UI", 16)
             painter.setFont(font)
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter,
-                             "所选文件夹中没有找到图片")
+                             tr('No images found in the selected folder'))
             return
 
         def blit(px: QPixmap, opacity: float):

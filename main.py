@@ -5,10 +5,12 @@ Entry point + settings UI.
 
 from __future__ import annotations
 
+from i18n import tr
+
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QTimer, QUrl, QLocale, QTranslator, QLibraryInfo
+from PyQt6.QtCore import Qt, QTimer, QUrl
 from PyQt6.QtGui import (
     QColor,
     QDesktopServices,
@@ -52,6 +54,7 @@ from blind import BlindManager
 from hotkeys import GlobalHotkeys
 from themes import apply_theme
 from instance import InstanceGuard
+from i18n import configure_language
 
 
 # ---------------------------------------------------------------------------
@@ -67,6 +70,7 @@ def _sep() -> QFrame:
 
 def _label(text: str, secondary: bool = False) -> QLabel:
     lbl = QLabel(text)
+    lbl.setWordWrap(True)
     if secondary:
         lbl.setProperty("secondary", "true")
         lbl.style().unpolish(lbl)
@@ -183,7 +187,7 @@ class MonitorsTab(QWidget):
         layout.setSpacing(10)
         layout.setContentsMargins(16, 16, 16, 16)
 
-        layout.addWidget(_label("选择需要锁定的显示器："))
+        layout.addWidget(_label(tr('Select displays to lock:')))
 
         self._list = QListWidget()
         self._list.setSpacing(2)
@@ -191,12 +195,12 @@ class MonitorsTab(QWidget):
         layout.addWidget(self._list)
 
         row = QHBoxLayout()
-        refresh_btn = QPushButton("↻  刷新显示器")
+        refresh_btn = QPushButton(tr('↻  Refresh displays'))
         refresh_btn.clicked.connect(self.refresh)
         row.addWidget(refresh_btn)
 
-        identify_btn = QPushButton("🔢  识别显示器")
-        identify_btn.setToolTip("在每个已连接的显示器上显示编号")
+        identify_btn = QPushButton(tr('🔢  Identify displays'))
+        identify_btn.setToolTip(tr('Show a number on each connected display'))
         identify_btn.clicked.connect(self.identify_screens)
         row.addWidget(identify_btn)
 
@@ -204,7 +208,7 @@ class MonitorsTab(QWidget):
         layout.addLayout(row)
 
         layout.addWidget(_label(
-            "提示：未锁定的显示器继续显示内容；锁定期间鼠标和键盘仅用于解锁。",
+            tr('Tip: unlocked displays remain visible; while locked, mouse and keyboard input is used only for unlocking.'),
             secondary=True,
         ))
 
@@ -235,10 +239,10 @@ class MonitorsTab(QWidget):
         for i, screen in enumerate(screens):
             native = dpi.native_geometry(screen)
             label = (
-                f"显示器 {i + 1}"
-                + ("（主显示器）" if screen is primary else "")
+                tr("Display {number}", number=i + 1)
+                + (tr(' (Primary)') if screen is primary else "")
                 + f"  —  {_resolution_text(screen)}"
-                + f"  位置（{native.x()}, {native.y()}）"
+                + tr("  at ({x}, {y})", x=native.x(), y=native.y())
             )
             item = QListWidgetItem(label)
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
@@ -280,32 +284,32 @@ class SecurityTab(QWidget):
         layout.addWidget(_sep())
 
         # Current password row (hidden when no password is set)
-        self._old_pw_lbl = _label("当前密码：")
+        self._old_pw_lbl = _label(tr('Current password:'))
         layout.addWidget(self._old_pw_lbl)
         self._old_pw = QLineEdit()
         self._old_pw.setEchoMode(QLineEdit.EchoMode.Password)
-        self._old_pw.setPlaceholderText("输入当前密码")
+        self._old_pw.setPlaceholderText(tr('Enter current password'))
         layout.addWidget(self._old_pw)
 
-        layout.addWidget(_label("新密码："))
+        layout.addWidget(_label(tr('New password:')))
         self._pw1 = QLineEdit()
         self._pw1.setEchoMode(QLineEdit.EchoMode.Password)
-        self._pw1.setPlaceholderText("输入新密码")
+        self._pw1.setPlaceholderText(tr('Enter new password'))
         layout.addWidget(self._pw1)
 
-        layout.addWidget(_label("确认新密码："))
+        layout.addWidget(_label(tr('Confirm new password:')))
         self._pw2 = QLineEdit()
         self._pw2.setEchoMode(QLineEdit.EchoMode.Password)
-        self._pw2.setPlaceholderText("再次输入新密码")
+        self._pw2.setPlaceholderText(tr('Repeat new password'))
         layout.addWidget(self._pw2)
 
-        show_cb = QCheckBox("显示密码")
-        show_cb.toggled.connect(self._toggle_show)
-        layout.addWidget(show_cb)
+        self._show_cb = QCheckBox(tr('Show passwords'))
+        self._show_cb.toggled.connect(self._toggle_show)
+        layout.addWidget(self._show_cb)
 
         layout.addWidget(_sep())
 
-        self._set_btn = QPushButton("设置密码")
+        self._set_btn = QPushButton(tr('Set password'))
         self._set_btn.clicked.connect(self._set_password)
         layout.addWidget(self._set_btn)
 
@@ -326,7 +330,7 @@ class SecurityTab(QWidget):
         import os
         has = self._has_password()
         self._status_lbl.setText(
-            "已设置密码。" if has else "尚未设置密码。"
+            tr('Password is set.') if has else tr('No password set yet.')
         )
         self._old_pw_lbl.setVisible(has)
         self._old_pw.setVisible(has)
@@ -337,7 +341,7 @@ class SecurityTab(QWidget):
             os.environ.get("APPDATA", ""), "ScreenBlind", "settings.json"
         )
         self._forgot_note.setText(
-            f"忘记密码？退出软件后，删除以下设置文件可重置：\n{settings_path}"
+            tr("Forgot your password? Exit the app and delete this settings file to reset:\n{path}", path=settings_path)
             if has else ""
         )
 
@@ -355,8 +359,8 @@ class SecurityTab(QWidget):
             old = self._old_pw.text()
             if not auth.verify_password(old, self._cfg["password_hash"]):
                 QMessageBox.warning(
-                    self, "密码错误",
-                    "当前密码不正确。",
+                    self, tr('Incorrect password'),
+                    tr('The current password is incorrect.'),
                 )
                 self._old_pw.clear()
                 self._old_pw.setFocus()
@@ -364,16 +368,16 @@ class SecurityTab(QWidget):
 
         p1, p2 = self._pw1.text(), self._pw2.text()
         if not p1:
-            QMessageBox.warning(self, "密码为空", "新密码不能为空。")
+            QMessageBox.warning(self, tr('Empty password'), tr('New password cannot be empty.'))
             return
         if p1 != p2:
-            QMessageBox.warning(self, "密码不一致", "两次输入的新密码不一致。")
+            QMessageBox.warning(self, tr('Passwords do not match'), tr('The new passwords do not match.'))
             return
 
         self._cfg["password_hash"] = auth.hash_password(p1)
         cfg_mod.save(self._cfg)
         self._refresh_ui()
-        QMessageBox.information(self, "完成", "密码已更新。")
+        QMessageBox.information(self, tr('Done'), tr('Password updated successfully.'))
 
 
 
@@ -391,15 +395,15 @@ class ScreensaverTab(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
 
         # Idle timeout
-        self._idle_enabled = QCheckBox("空闲后自动启动屏保")
+        self._idle_enabled = QCheckBox(tr('Start the screensaver when idle'))
         self._idle_enabled.setChecked(cfg.get("screensaver_enabled", True))
         layout.addWidget(self._idle_enabled)
-        layout.addWidget(_label("空闲多久后启动屏保："))
+        layout.addWidget(_label(tr('Start screensaver after idle:')))
         row1 = QHBoxLayout()
         self._timeout_spin = QSpinBox()
         self._timeout_spin.setRange(10, 3600)
         self._timeout_spin.setValue(cfg.get("idle_timeout", 120))
-        self._timeout_spin.setSuffix("  秒")
+        self._timeout_spin.setSuffix(tr('  seconds'))
         self._timeout_spin.setFixedWidth(160)
         self._timeout_spin.setEnabled(self._idle_enabled.isChecked())
         self._idle_enabled.toggled.connect(self._save_idle_enabled)
@@ -411,9 +415,9 @@ class ScreensaverTab(QWidget):
         layout.addWidget(_sep())
 
         # Animation type
-        layout.addWidget(_label("屏保样式："))
+        layout.addWidget(_label(tr('Animation style:')))
         self._anim_combo = QComboBox()
-        self._anim_combo.addItems(["气泡", "数字雨", "流光", "图片幻灯片", "无"])
+        self._anim_combo.addItems([tr('Bubbles'), tr('Matrix'), tr('Flurry'), tr('Image slideshow'), tr('None')])
         type_map = {"bubbles": 0, "matrix": 1, "flurry": 2, "slideshow": 3, "none": 4}
         self._anim_combo.setCurrentIndex(type_map.get(cfg.get("screensaver_type", "bubbles"), 0))
         self._anim_combo.currentIndexChanged.connect(self._save_anim)
@@ -422,23 +426,23 @@ class ScreensaverTab(QWidget):
         layout.addWidget(_sep())
 
         # Slideshow options
-        layout.addWidget(_label("幻灯片选项："))
-        self._folder_lbl = _label(cfg.get("slideshow_folder") or "未选择文件夹", secondary=True)
+        layout.addWidget(_label(tr('Slideshow options:')))
+        self._folder_lbl = _label(cfg.get("slideshow_folder") or tr('No folder selected'), secondary=True)
         layout.addWidget(self._folder_lbl)
 
         row2 = QHBoxLayout()
-        browse_btn = QPushButton("选择文件夹…")
+        browse_btn = QPushButton(tr('Browse folder…'))
         browse_btn.clicked.connect(self._browse_folder)
         row2.addWidget(browse_btn)
         row2.addStretch()
         layout.addLayout(row2)
 
-        layout.addWidget(_label("每张图片的显示时长："))
+        layout.addWidget(_label(tr('Seconds per image:')))
         row3 = QHBoxLayout()
         self._interval_spin = QSpinBox()
         self._interval_spin.setRange(1, 300)
         self._interval_spin.setValue(cfg.get("slideshow_interval", 5))
-        self._interval_spin.setSuffix("  秒")
+        self._interval_spin.setSuffix(tr('  seconds'))
         self._interval_spin.setFixedWidth(120)
         self._interval_spin.valueChanged.connect(self._save_interval)
         row3.addWidget(self._interval_spin)
@@ -462,7 +466,7 @@ class ScreensaverTab(QWidget):
         cfg_mod.save(self._cfg)
 
     def _browse_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "选择图片文件夹")
+        folder = QFileDialog.getExistingDirectory(self, tr('Select image folder'))
         if folder:
             self._cfg["slideshow_folder"] = folder
             self._folder_lbl.setText(folder)
@@ -477,7 +481,7 @@ class ScreensaverTab(QWidget):
 # About tab
 # ---------------------------------------------------------------------------
 
-APP_VERSION = "1.3.1"
+APP_VERSION = "1.4.0"
 WEBSITE_URL = "https://screenblind.cc"
 DONATE_URL  = "https://www.paypal.com/donate/?hosted_button_id=ZXKFFGA7W6Y5E"
 
@@ -514,13 +518,13 @@ class AboutTab(QWidget):
         layout.addWidget(name)
 
         # Tagline
-        tagline = QLabel("遮住私密内容，让需要展示的画面继续显示。")
+        tagline = QLabel(tr("Lock what others shouldn't see. Unlock what matters."))
         tagline.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         tagline.setFont(QFont("Microsoft YaHei UI", 10))
         layout.addWidget(tagline)
 
         # Version
-        version = QLabel(f"版本 {APP_VERSION}")
+        version = QLabel(tr("Version {version}", version=APP_VERSION))
         version.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         layout.addWidget(version)
 
@@ -531,13 +535,13 @@ class AboutTab(QWidget):
         btn_row.setSpacing(12)
         btn_row.addStretch()
 
-        site_btn = QPushButton("  访问原项目网站  ")
+        site_btn = QPushButton(tr('  Visit website  '))
         site_btn.setObjectName("aboutBtn")
         site_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         site_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(WEBSITE_URL)))
         btn_row.addWidget(site_btn)
 
-        donate_btn = QPushButton("  ❤  支持原作者  ")
+        donate_btn = QPushButton(tr('  ❤  Donate  '))
         donate_btn.setObjectName("donateBtn")
         donate_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         donate_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(DONATE_URL)))
@@ -550,10 +554,7 @@ class AboutTab(QWidget):
 
         # Description / credits block
         about_text = QLabel(
-            "ScreenBlind 可选择性地锁定显示器，其他显示器继续显示演示、视频或看板。\n"
-            "锁定期间鼠标和键盘由锁屏接管，输入正确密码后统一解锁。\n\n"
-            "本分支增加中文界面、托盘驻留、全局快捷键与浅色 / 深色主题。\n"
-            "原项目作者：hemigapp · 开源许可：MIT"
+            tr('ScreenBlind selectively locks chosen displays while presentations, videos or dashboards remain visible on the others.\nMouse and keyboard input is captured until the correct password is entered.\n\nIncludes a system tray, global hotkeys, light/dark themes and English / Simplified Chinese.\nOriginal author: hemigapp · License: MIT')
         )
         about_text.setWordWrap(True)
         about_text.setAlignment(Qt.AlignmentFlag.AlignHCenter)
@@ -563,10 +564,7 @@ class AboutTab(QWidget):
 
         # Disclaimer
         disclaimer = QLabel(
-            "使用说明与免责声明\n"
-            "本软件是隐私遮挡工具，不能替代 Windows 系统锁屏。"
-            "Win+L 和 Ctrl+Alt+Del 仍由系统处理。"
-            "软件按现状提供，不作任何担保；请妥善保管密码，并保留恢复方式。"
+            tr('Usage and disclaimer\nScreenBlind is a privacy tool, not a replacement for the Windows lock screen. Win+L and Ctrl+Alt+Del are still handled by Windows. The software is provided as is, without warranty. Keep your password safe and have a recovery plan.')
         )
         disclaimer.setWordWrap(True)
         disclaimer.setAlignment(Qt.AlignmentFlag.AlignHCenter)
@@ -590,6 +588,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self._cfg = cfg_mod.load()
+        configure_language(QApplication.instance(), self._cfg.get("language", "system"))
         self._blind_manager: BlindManager | None = None
 
         self.setWindowTitle(f"ScreenBlind v{APP_VERSION}")
@@ -635,12 +634,12 @@ class MainWindow(QMainWindow):
         self._about_scroll.setWidgetResizable(True)
         self._about_scroll.setFrameShape(QFrame.Shape.NoFrame)
         self._about_scroll.setWidget(self._about_tab)
-        self._tabs.addTab(self._monitors_tab, "  显示器  ")
-        self._tabs.addTab(self._security_tab, "  安全  ")
-        self._tabs.addTab(self._screensaver_tab, "  屏保  ")
+        self._tabs.addTab(self._monitors_tab, tr('  Displays  '))
+        self._tabs.addTab(self._security_tab, tr('  Security  '))
+        self._tabs.addTab(self._screensaver_tab, tr('  Screensaver  '))
         self._general_tab = self._build_general_tab()
-        self._tabs.addTab(self._general_tab, "  通用  ")
-        self._tabs.addTab(self._about_scroll, "  关于  ")
+        self._tabs.addTab(self._general_tab, tr('  General  '))
+        self._tabs.addTab(self._about_scroll, tr('  About  '))
         root.addWidget(self._tabs, 1)
 
         # Footer with lock button
@@ -649,7 +648,7 @@ class MainWindow(QMainWindow):
         fl = QHBoxLayout(footer)
         fl.setContentsMargins(18, 12, 18, 12)
         fl.addStretch()
-        self._lock_btn = QPushButton("  立即锁定  ")
+        self._lock_btn = QPushButton(tr('  Lock now  '))
         self._lock_btn.setObjectName("lockBtn")
         self._lock_btn.setFixedHeight(48)
         self._lock_btn.clicked.connect(self._on_lock_clicked)
@@ -659,15 +658,21 @@ class MainWindow(QMainWindow):
 
     def _build_tray(self):
         self._tray = QSystemTrayIcon(_app_icon(), self)
-        menu = QMenu()
-        self._settings_action = menu.addAction("打开设置", self.show_normal)
-        self._tray_lock_action = menu.addAction("立即锁定", self._on_lock_clicked)
-        menu.addSeparator()
-        self._exit_action = menu.addAction("退出软件", self._exit_app)
-        self._tray.setContextMenu(menu)
-        self._tray.setToolTip(f"ScreenBlind v{APP_VERSION}")
+        self._refresh_tray_menu()
         self._tray.activated.connect(self._on_tray_activated)
         self._tray.show()
+
+    def _refresh_tray_menu(self):
+        previous = self._tray.contextMenu()
+        menu = QMenu(self)
+        self._settings_action = menu.addAction(tr('Open settings'), self.show_normal)
+        self._tray_lock_action = menu.addAction(tr('Lock now'), self._on_lock_clicked)
+        menu.addSeparator()
+        self._exit_action = menu.addAction(tr('Exit'), self._exit_app)
+        self._tray.setContextMenu(menu)
+        self._set_locked_actions(bool(self._blind_manager))
+        if previous:
+            previous.deleteLater()
 
     # -- actions -------------------------------------------------------------
 
@@ -701,8 +706,8 @@ class MainWindow(QMainWindow):
         if not self._cfg.get("password_hash"):
             self.show_normal()
             QMessageBox.warning(
-                self, "尚未设置密码",
-                "请先在“安全”页面设置密码，再锁定显示器。",
+                self, tr('No password'),
+                tr('Set a password in the Security tab before locking.'),
             )
             self._tabs.setCurrentIndex(1)
             return
@@ -713,8 +718,8 @@ class MainWindow(QMainWindow):
         if not locked:
             self.show_normal()
             QMessageBox.warning(
-                self, "尚未选择显示器",
-                "请先在“显示器”页面选择至少一个显示器。",
+                self, tr('No displays selected'),
+                tr('Select at least one display in the Displays tab.'),
             )
             self._tabs.setCurrentIndex(0)
             return
@@ -743,8 +748,8 @@ class MainWindow(QMainWindow):
         if self._blind_manager:
             # Don't allow exit while locked — require password first
             QMessageBox.information(
-                self, "已锁定",
-                "请先输入密码解锁，再退出软件。",
+                self, tr('Locked'),
+                tr('Unlock the displays before exiting.'),
             )
             return
         self._hotkeys.close()
@@ -756,70 +761,112 @@ class MainWindow(QMainWindow):
         self.hide()
         if not getattr(self, "_tray_tip_shown", False) and not self._blind_manager:
             self._tray_tip_shown = True
-            self._tray.showMessage("ScreenBlind 仍在运行", "已收起到托盘。双击图标恢复设置，右键菜单可退出软件。")
+            self._tray.showMessage(tr('ScreenBlind is still running'), tr('Minimized to the tray. Double-click the icon to open settings, or right-click to exit.'))
 
     def _set_locked_actions(self, locked):
         for action in (self._settings_action, self._tray_lock_action, self._exit_action):
             action.setEnabled(not locked)
-        self._tray.setToolTip("ScreenBlind · 已锁定，请输入密码解锁" if locked else f"ScreenBlind v{APP_VERSION} · 后台运行")
+        self._tray.setToolTip(tr('ScreenBlind · Locked; enter your password to unlock') if locked else tr("ScreenBlind v{version} · Running in the tray", version=APP_VERSION))
 
     def _build_general_tab(self):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
         tab = QWidget()
         layout = QVBoxLayout(tab)
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(12)
-        self._startup_cb = QCheckBox("开机自启动（登录 Windows 后驻留托盘）")
-        self._startup_status = _label("默认关闭；开启后请保留当前程序的位置。", secondary=True)
+        layout.addWidget(_label(tr('Language')))
+        self._language_combo = QComboBox()
+        self._language_combo.addItem(tr('System default'), 'system')
+        self._language_combo.addItem('English', 'en')
+        self._language_combo.addItem('简体中文', 'zh_CN')
+        self._language_combo.setCurrentIndex(max(0, self._language_combo.findData(self._cfg.get('language', 'system'))))
+        self._language_combo.currentIndexChanged.connect(self._change_language)
+        layout.addWidget(self._language_combo)
+        layout.addWidget(_sep())
+        self._startup_cb = QCheckBox(tr('Start with Windows (run in the tray after sign-in)'))
+        self._startup_status = _label(tr('Off by default. Keep the executable in its current location after enabling.'), secondary=True)
         self._startup_status.setWordWrap(True)
         try:
             self._startup_cb.setChecked(startup.is_enabled())
         except OSError:
             self._startup_cb.setEnabled(False)
-            self._startup_status.setText("无法读取开机自启动设置，请检查当前用户的注册表访问权限。")
+            self._startup_status.setText(tr('Cannot read startup settings. Check registry access for the current user.'))
         self._startup_cb.toggled.connect(self._change_startup)
         layout.addWidget(self._startup_cb)
         layout.addWidget(self._startup_status)
         layout.addWidget(_sep())
-        layout.addWidget(_label("界面主题"))
+        layout.addWidget(_label(tr('Theme')))
         self._theme_combo = QComboBox()
-        self._theme_combo.addItem("深色", "dark")
-        self._theme_combo.addItem("浅色", "light")
+        self._theme_combo.addItem(tr('Dark'), "dark")
+        self._theme_combo.addItem(tr('Light'), "light")
         self._theme_combo.setCurrentIndex(1 if self._cfg.get("theme") == "light" else 0)
         self._theme_combo.currentIndexChanged.connect(self._change_theme)
         layout.addWidget(self._theme_combo)
         layout.addWidget(_sep())
-        layout.addWidget(_label("全局快捷键 · 收起到托盘后仍然有效"))
+        layout.addWidget(_label(tr('Global hotkeys · Active while in the tray')))
         self._shortcut_edits = {}
-        for action, label, key in (("lock", "立即锁定", "lock_hotkey"),
-                                   ("settings", "打开设置", "settings_hotkey")):
+        for action, label, key in (("lock", tr('Lock now'), "lock_hotkey"),
+                                   ("settings", tr('Open settings'), "settings_hotkey")):
             row = QHBoxLayout()
             row.addWidget(_label(label))
             edit = QKeySequenceEdit(QKeySequence(self._cfg[key]))
-            edit.setAccessibleName(label + "快捷键")
+            edit.setAccessibleName(label + tr(' shortcut'))
             line_edit = edit.findChild(QLineEdit)
             if line_edit:
-                line_edit.setPlaceholderText("未设置，点击后按组合键")
+                line_edit.setPlaceholderText(tr('Not set; press a key combination'))
             row.addWidget(edit, 1)
-            clear = QPushButton("清除")
+            clear = QPushButton(tr('Clear'))
             clear.clicked.connect(edit.clear)
             row.addWidget(clear)
             layout.addLayout(row)
             self._shortcut_edits[action] = edit
-        hint = _label("点击输入框后按下组合键。支持 Ctrl / Alt + 字母、数字或 F1–F11，可加 Shift。\n清空后保存可禁用该操作；快捷键无法直接解锁。", secondary=True)
+        hint = _label(tr('Click a field and press a combination: Ctrl / Alt + a letter, digit or F1–F11; Shift is optional.\nClear and save to disable an action. Hotkeys cannot unlock displays.'), secondary=True)
         hint.setWordWrap(True)
         layout.addWidget(hint)
-        save = QPushButton("保存快捷键")
+        save = QPushButton(tr('Save hotkeys'))
         save.clicked.connect(self._save_hotkeys)
         layout.addWidget(save)
         self._hotkey_status = _label("", secondary=True)
         self._hotkey_status.setWordWrap(True)
         layout.addWidget(self._hotkey_status)
         layout.addWidget(_sep())
-        note = _label("关闭窗口后继续驻留托盘。双击托盘图标打开设置，右键选择“退出软件”可完全退出。", secondary=True)
+        note = _label(tr('Closing this window keeps ScreenBlind in the tray. Double-click the tray icon to open settings; right-click and choose Exit to quit.'), secondary=True)
         note.setWordWrap(True)
         layout.addWidget(note)
         layout.addStretch()
-        return tab
+        scroll.setWidget(tab)
+        return scroll
+
+    def _change_language(self):
+        if self._blind_manager:
+            return
+        choice = self._language_combo.currentData()
+        if choice == self._cfg.get('language', 'system'):
+            return
+        self._cfg['language'] = choice
+        cfg_mod.save(self._cfg)
+        selected_tab = self._tabs.currentIndex()
+        passwords = [edit.text() for edit in (
+            self._security_tab._old_pw, self._security_tab._pw1, self._security_tab._pw2)]
+        show_passwords = self._security_tab._show_cb.isChecked()
+        shortcuts = {action: edit.keySequence() for action, edit in self._shortcut_edits.items()}
+        self._monitors_tab._dismiss_identifiers()
+        configure_language(QApplication.instance(), choice)
+        previous = self.takeCentralWidget()
+        self._build_ui()
+        self._tabs.setCurrentIndex(selected_tab)
+        for edit, text in zip((self._security_tab._old_pw, self._security_tab._pw1, self._security_tab._pw2), passwords):
+            edit.setText(text)
+        self._security_tab._show_cb.setChecked(show_passwords)
+        for action, sequence in shortcuts.items():
+            self._shortcut_edits[action].setKeySequence(sequence)
+        self._refresh_tray_menu()
+        self._configure_hotkeys()
+        apply_theme(QApplication.instance(), self._cfg.get('theme', 'dark'))
+        previous.deleteLater()
 
     def _change_startup(self, enabled):
         try:
@@ -828,9 +875,9 @@ class MainWindow(QMainWindow):
             self._startup_cb.blockSignals(True)
             self._startup_cb.setChecked(not enabled)
             self._startup_cb.blockSignals(False)
-            QMessageBox.warning(self, "设置失败", "无法更新开机自启动设置，请检查当前用户的注册表访问权限。")
+            QMessageBox.warning(self, tr('Settings update failed'), tr('Cannot update startup settings. Check registry access for the current user.'))
             return
-        self._startup_status.setText("已开启：下次登录 Windows 后将自动驻留托盘。" if enabled else "已关闭开机自启动。")
+        self._startup_status.setText(tr('Enabled: ScreenBlind will run in the tray after your next Windows sign-in.') if enabled else tr('Windows startup is disabled.'))
 
     def _change_theme(self):
         theme = self._theme_combo.currentData()
@@ -842,11 +889,11 @@ class MainWindow(QMainWindow):
         try:
             self._hotkeys.configure({"lock": self._cfg["lock_hotkey"],
                                      "settings": self._cfg["settings_hotkey"]})
-            self._hotkey_status.setText("快捷键设置已生效。" if any((self._cfg["lock_hotkey"], self._cfg["settings_hotkey"])) else "已禁用全部快捷键。")
+            self._hotkey_status.setText(tr('Hotkeys are active.') if any((self._cfg["lock_hotkey"], self._cfg["settings_hotkey"])) else tr('All hotkeys are disabled.'))
         except ValueError as exc:
-            self._hotkey_status.setText(str(exc) + " 请修改后保存；托盘菜单仍可使用。")
+            self._hotkey_status.setText(str(exc) + tr(' Change the combination and save. The tray menu is still available.'))
             if initial:
-                QTimer.singleShot(1600, lambda: self._tray.showMessage("快捷键未启用", self._hotkey_status.text()))
+                QTimer.singleShot(1600, lambda: self._tray.showMessage(tr('Hotkeys are unavailable'), self._hotkey_status.text()))
 
     def _save_hotkeys(self):
         shortcuts = {action: edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText)
@@ -854,11 +901,11 @@ class MainWindow(QMainWindow):
         try:
             self._hotkeys.configure(shortcuts)
         except ValueError as exc:
-            QMessageBox.warning(self, "快捷键未保存", str(exc) + "\n原有快捷键保持不变。")
+            QMessageBox.warning(self, tr('Hotkeys were not saved'), str(exc) + tr('\nYour previous hotkeys remain active.'))
             return
         self._cfg.update(lock_hotkey=shortcuts["lock"], settings_hotkey=shortcuts["settings"])
         cfg_mod.save(self._cfg)
-        self._hotkey_status.setText("快捷键已保存并生效。")
+        self._hotkey_status.setText(tr('Hotkeys saved and applied.'))
 
 
 # ---------------------------------------------------------------------------
@@ -876,10 +923,7 @@ def main():
     app.setApplicationName("ScreenBlind")
     app.setQuitOnLastWindowClosed(False)
 
-    QLocale.setDefault(QLocale(QLocale.Language.Chinese, QLocale.Country.China))
-    translator = QTranslator(app)
-    translator.load("qtbase_zh_CN", QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath))
-    app.installTranslator(translator)
+    configure_language(app, cfg_mod.load().get('language', 'system'))
     app.setStyle("Fusion")
 
     # App-wide icon
@@ -890,12 +934,12 @@ def main():
         if not guard.acquire():
             return
     except RuntimeError as exc:
-        QMessageBox.warning(None, "无法启动", str(exc))
+        QMessageBox.warning(None, tr('Unable to start'), str(exc))
         return
     app.aboutToQuit.connect(guard.close)
 
     if not QSystemTrayIcon.isSystemTrayAvailable():
-        QMessageBox.critical(None, "错误", "当前系统不支持托盘图标，无法启动。")
+        QMessageBox.critical(None, tr('Error'), tr('The system tray is unavailable. ScreenBlind cannot start.'))
         sys.exit(1)
 
     win = MainWindow()

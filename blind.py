@@ -5,12 +5,15 @@ widget), and BlindManager (orchestrates everything).
 
 from __future__ import annotations
 
+from i18n import tr
+
 import ctypes
 import ctypes.wintypes
 import random
 
 from PyQt6.QtCore import (
     QDateTime,
+    QLocale,
     QObject,
     QRect,
     Qt,
@@ -534,7 +537,7 @@ class BlindOverlay(QWidget):
         painter.drawText(sec_x, y_base + 10, sec_str)
 
         # Date
-        date_str = now.toString("yyyy年M月d日 dddd")
+        date_str = QLocale().toString(now, tr('dddd, MMMM d'))
         font_date = QFont("Microsoft YaHei UI", 18)
         font_date.setWeight(QFont.Weight.Light)
         painter.setFont(font_date)
@@ -584,7 +587,7 @@ class BlindOverlay(QWidget):
             painter.drawText(
                 QRect(px, py + 28, pw, 40),
                 Qt.AlignmentFlag.AlignCenter,
-                "输入密码",
+                tr('Enter password'),
             )
             # Blinking cursor centered in placeholder area
             if self._state.cursor_visible:
@@ -598,14 +601,14 @@ class BlindOverlay(QWidget):
             painter.drawText(
                 QRect(px, py + 88, pw, 30),
                 Qt.AlignmentFlag.AlignCenter,
-                "密码错误",
+                tr('Incorrect password'),
             )
         else:
             painter.setPen(QColor(130, 130, 175, 190))
             painter.drawText(
                 QRect(px, py + 88, pw, 30),
                 Qt.AlignmentFlag.AlignCenter,
-                "密码正确即解锁    Esc  取消",
+                tr('Correct password unlocks    Esc  Cancel'),
             )
 
     def _draw_hint(self, painter: QPainter, rect: QRect):
@@ -616,7 +619,7 @@ class BlindOverlay(QWidget):
         painter.drawText(
             QRect(0, int(rect.height() * 0.84), rect.width(), 30),
             Qt.AlignmentFlag.AlignCenter,
-            "按任意键输入密码解锁",
+            tr('Type your password to unlock'),
         )
 
     # -- input ---------------------------------------------------------------

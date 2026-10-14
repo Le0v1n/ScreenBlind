@@ -1,5 +1,6 @@
 """Keep one tray instance per Windows user and activate it on a second launch."""
 import hashlib
+from i18n import tr
 from PyQt6.QtCore import QLockFile, QObject, pyqtSignal
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 
@@ -19,13 +20,13 @@ class InstanceGuard(QObject):
             socket = QLocalSocket(self)
             socket.connectToServer(self._name)
             if not socket.waitForConnected(3000):
-                raise RuntimeError('ScreenBlind 已在运行，但暂时无法连接。请稍后重试。')
+                raise RuntimeError(tr('ScreenBlind is already running but could not be reached. Try again shortly.'))
             socket.disconnectFromServer()
             return False
         QLocalServer.removeServer(self._name)
         if not self._server.listen(self._name):
             self._lock.unlock()
-            raise RuntimeError('无法创建 ScreenBlind 实例通信服务。')
+            raise RuntimeError(tr('Cannot create the ScreenBlind instance communication service.'))
         self._server.newConnection.connect(self._activate)
         return True
 
