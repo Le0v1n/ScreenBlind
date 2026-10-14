@@ -175,6 +175,7 @@ class BlindState(QObject):
         self.in_screensaver = False
         self.shake_offset = 0
         self._wrong = False
+        self._unlock_emitted = False
 
         self._idle_timer = QTimer(self)
         self._idle_timer.setSingleShot(True)
@@ -309,18 +310,33 @@ class BlindState(QObject):
             self._bg_fade_timer.stop()
 
     def handle_char(self, ch: str):
+        if self._unlock_emitted:
+            return
         self.password_buffer += ch
         self.updated.emit()
+        self._try_unlock()
 
     def handle_backspace(self):
+        if self._unlock_emitted:
+            return
         if self.password_buffer:
             self.password_buffer = self.password_buffer[:-1]
             self.updated.emit()
+            self._try_unlock()
+
+    def _try_unlock(self) -> bool:
+        """Check the complete buffer silently; a partial password is normal."""
+        if self._unlock_emitted:
+            return True
+        if verify_password(self.password_buffer, self._cfg.get("password_hash", "")):
+            self._unlock_emitted = True
+            self.password_buffer = ""
+            self.unlocked.emit()
+            return True
+        return False
 
     def attempt_unlock(self):
-        if verify_password(self.password_buffer, self._cfg.get("password_hash", "")):
-            self.unlocked.emit()
-        else:
+        if not self._try_unlock():
             self.password_buffer = ""
             self._wrong = True
             self._start_shake()
@@ -589,7 +605,7 @@ class BlindOverlay(QWidget):
             painter.drawText(
                 QRect(px, py + 88, pw, 30),
                 Qt.AlignmentFlag.AlignCenter,
-                "↵  解锁    Esc  取消",
+                "密码正确即解锁    Esc  取消",
             )
 
     def _draw_hint(self, painter: QPainter, rect: QRect):
@@ -610,6 +626,9 @@ class BlindOverlay(QWidget):
             return
         if not self._state.showing_password:
             self._state.show_password_input()
+            text = event.text()
+            if text and text.isprintable():
+                self._state.handle_char(text)
             return
         key = event.key()
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):

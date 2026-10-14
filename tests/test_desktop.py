@@ -9,8 +9,8 @@ import winreg
 from unittest.mock import Mock, patch
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-from PyQt6.QtCore import QCoreApplication, QEvent, Qt
-from PyQt6.QtGui import QKeySequence
+from PyQt6.QtCore import QCoreApplication, QEvent, Qt, QRect
+from PyQt6.QtGui import QKeySequence, QKeyEvent
 from PyQt6.QtWidgets import QApplication
 
 import auth
@@ -203,6 +203,74 @@ class WindowTests(unittest.TestCase):
 
 
 class LockTests(unittest.TestCase):
+    def test_typing_exact_password_unlocks_without_enter(self):
+        state = blind.BlindState({'password_hash': auth.hash_password('1024')})
+        unlocked = Mock()
+        state.unlocked.connect(unlocked)
+        for char in '102':
+            state.handle_char(char)
+            unlocked.assert_not_called()
+            self.assertFalse(state.wrong)
+        state.handle_char('4')
+        unlocked.assert_called_once()
+        self.assertEqual(state.password_buffer, '')
+        state.handle_char('4')
+        state.attempt_unlock()
+        unlocked.assert_called_once()
+        state.deleteLater()
+
+    def test_incorrect_input_can_be_corrected_without_enter(self):
+        state = blind.BlindState({'password_hash': auth.hash_password('1024')})
+        unlocked = Mock()
+        state.unlocked.connect(unlocked)
+        for char in '1025':
+            state.handle_char(char)
+        self.assertEqual(state.password_buffer, '1025')
+        self.assertFalse(state.wrong)
+        unlocked.assert_not_called()
+        state.handle_backspace()
+        state.handle_char('4')
+        unlocked.assert_called_once()
+        state.deleteLater()
+
+    def test_backspace_to_exact_match_unlocks(self):
+        state = blind.BlindState({'password_hash': auth.hash_password('1024')})
+        unlocked = Mock()
+        state.unlocked.connect(unlocked)
+        state.handle_char('10240')  # A complete multi-character input event.
+        unlocked.assert_not_called()
+        state.handle_backspace()
+        unlocked.assert_called_once()
+        state.deleteLater()
+
+    def test_first_printable_key_opens_prompt_and_counts_toward_password(self):
+        state = blind.BlindState({'password_hash': auth.hash_password('1024')})
+        unlocked = Mock()
+        state.unlocked.connect(unlocked)
+        overlay = blind.BlindOverlay(QRect(0, 0, 800, 600), state, {'screensaver_type': 'none'})
+        try:
+            for char in '1024':
+                event = QKeyEvent(QEvent.Type.KeyPress, ord(char), Qt.KeyboardModifier.NoModifier, char)
+                overlay.keyPressEvent(event)
+                if char == '1':
+                    self.assertTrue(state.showing_password)
+                    self.assertEqual(state.password_buffer, '1')
+            unlocked.assert_called_once()
+        finally:
+            overlay.deleteLater()
+            state.deleteLater()
+
+    def test_longer_password_does_not_unlock_on_prefix(self):
+        state = blind.BlindState({'password_hash': auth.hash_password('10240')})
+        unlocked = Mock()
+        state.unlocked.connect(unlocked)
+        for char in '1024':
+            state.handle_char(char)
+        unlocked.assert_not_called()
+        state.handle_char('0')
+        unlocked.assert_called_once()
+        state.deleteLater()
+
     def test_disabled_screensaver_never_arms_timer_or_hides_password(self):
         state = blind.BlindState({'screensaver_enabled': False, 'idle_timeout': 10})
         state.show_password_input()

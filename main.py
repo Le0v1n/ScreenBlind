@@ -477,7 +477,7 @@ class ScreensaverTab(QWidget):
 # About tab
 # ---------------------------------------------------------------------------
 
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.3.1"
 WEBSITE_URL = "https://screenblind.cc"
 DONATE_URL  = "https://www.paypal.com/donate/?hosted_button_id=ZXKFFGA7W6Y5E"
 
