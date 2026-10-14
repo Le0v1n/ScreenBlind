@@ -508,7 +508,7 @@ class SlideshowAnimation(BaseAnimation):
             font = QFont("Segoe UI", 16)
             painter.setFont(font)
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter,
-                             "No images found in selected folder")
+                             "所选文件夹中没有找到图片")
             return
 
         def blit(px: QPixmap, opacity: float):

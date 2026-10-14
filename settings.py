@@ -3,6 +3,9 @@ import os
 from pathlib import Path
 
 DEFAULTS: dict = {
+    "theme": "dark",
+    "lock_hotkey": "Ctrl+Alt+L",
+    "settings_hotkey": "Ctrl+Alt+S",
     "password_hash": "",
     "locked_screens": [],
     "idle_timeout": 120,          # seconds before screensaver starts

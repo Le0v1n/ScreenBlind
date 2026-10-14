@@ -513,8 +513,8 @@ class BlindOverlay(QWidget):
         painter.drawText(sec_x, y_base + 10, sec_str)
 
         # Date
-        date_str = now.toString("dddd, MMMM d")
-        font_date = QFont("Segoe UI", 18)
+        date_str = now.toString("yyyy年M月d日 dddd")
+        font_date = QFont("Microsoft YaHei UI", 18)
         font_date.setWeight(QFont.Weight.Light)
         painter.setFont(font_date)
         painter.setPen(QColor(190, 190, 240, 190))
@@ -556,46 +556,46 @@ class BlindOverlay(QWidget):
                 cursor_x = dx + (n - 1) * spacing + dot_r * 2 + 6
                 painter.fillRect(cursor_x, dy - 3, 2, dot_r * 2 + 6, QColor(255, 255, 255, 210))
         else:
-            font = QFont("Segoe UI", 14)
+            font = QFont("Microsoft YaHei UI", 14)
             font.setWeight(QFont.Weight.Light)
             painter.setFont(font)
             painter.setPen(QColor(140, 140, 180))
             painter.drawText(
                 QRect(px, py + 28, pw, 40),
                 Qt.AlignmentFlag.AlignCenter,
-                "Enter password",
+                "输入密码",
             )
             # Blinking cursor centered in placeholder area
             if self._state.cursor_visible:
                 painter.fillRect(px + pw // 2, py + 32, 2, 22, QColor(200, 200, 220, 200))
 
         # Status/hint line
-        font2 = QFont("Segoe UI", 11)
+        font2 = QFont("Microsoft YaHei UI", 11)
         painter.setFont(font2)
         if self._state.wrong:
             painter.setPen(QColor(255, 100, 100, 220))
             painter.drawText(
                 QRect(px, py + 88, pw, 30),
                 Qt.AlignmentFlag.AlignCenter,
-                "Incorrect password",
+                "密码错误",
             )
         else:
             painter.setPen(QColor(130, 130, 175, 190))
             painter.drawText(
                 QRect(px, py + 88, pw, 30),
                 Qt.AlignmentFlag.AlignCenter,
-                "↵  Unlock    Esc  Cancel",
+                "↵  解锁    Esc  取消",
             )
 
     def _draw_hint(self, painter: QPainter, rect: QRect):
-        font = QFont("Segoe UI", 13)
+        font = QFont("Microsoft YaHei UI", 13)
         font.setWeight(QFont.Weight.Light)
         painter.setFont(font)
         painter.setPen(QColor(130, 130, 190, 160))
         painter.drawText(
             QRect(0, int(rect.height() * 0.84), rect.width(), 30),
             Qt.AlignmentFlag.AlignCenter,
-            "Press any key to unlock",
+            "按任意键输入密码解锁",
         )
 
     # -- input ---------------------------------------------------------------
@@ -664,7 +664,7 @@ class BlindManager(QObject):
 
     def lock(self):
         if self._overlays:
-            return
+            return True
 
         self._state = BlindState(self._cfg, self)
         self._state.unlocked.connect(self._on_unlocked)
@@ -675,7 +675,7 @@ class BlindManager(QObject):
         clip_rects: list[QRect] = []
 
         for idx in locked_indices:
-            if idx >= len(screens):
+            if not 0 <= idx < len(screens):
                 continue
             geo = screens[idx].geometry()
             overlay = BlindOverlay(geo, self._state, self._cfg)
@@ -688,8 +688,9 @@ class BlindManager(QObject):
             clip_rects.append(overlay.native_rect)
 
         if not self._overlays:
+            self._state.deleteLater()
             self._state = None
-            return
+            return False
 
         # Trap mouse inside the bounding rect of all locked screens.
         # Physical pixels throughout — that is the space ClipCursor and
@@ -706,6 +707,7 @@ class BlindManager(QObject):
         if self._overlays:
             self._overlays[0].activateWindow()
             self._overlays[0].setFocus()
+        return True
 
     def _apply_cursor_clip(self):
         if not self._locked_rects:
@@ -770,6 +772,9 @@ class BlindManager(QObject):
         for o in self._overlays:
             o._allow_close = True
             o.close()
+            o.deleteLater()
         self._overlays.clear()
+        if self._state:
+            self._state.deleteLater()
         self._state = None
         self.unlocked.emit()
