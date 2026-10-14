@@ -219,6 +219,9 @@ class BlindState(QObject):
     # -- idle / screensaver --------------------------------------------------
 
     def start_idle_timer(self):
+        if not self._cfg.get("screensaver_enabled", True):
+            self._idle_timer.stop()
+            return
         ms = max(10, self._cfg.get("idle_timeout", 120)) * 1000
         self._idle_timer.start(ms)
 
@@ -237,6 +240,8 @@ class BlindState(QObject):
             self.updated.emit()
 
     def _on_idle(self):
+        if not self._cfg.get("screensaver_enabled", True):
+            return
         self.in_screensaver = True
         self.cursor_hidden = True
         # Silently dismiss any open password prompt

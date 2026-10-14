@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+import uuid
+import winreg
 from unittest.mock import Mock, patch
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
@@ -16,6 +18,7 @@ import blind
 import hotkeys
 import main
 import settings
+import startup
 from instance import InstanceGuard
 
 APP = QApplication.instance() or QApplication([])
@@ -81,6 +84,8 @@ class WindowTests(unittest.TestCase):
         self.env.start()
         self.hotkeys_patch = patch.object(main, 'GlobalHotkeys')
         self.hotkeys_patch.start()
+        self.startup_patch = patch.object(startup, 'is_enabled', return_value=False)
+        self.startup_patch.start()
         self.window = main.MainWindow()
 
     def tearDown(self):
@@ -89,6 +94,7 @@ class WindowTests(unittest.TestCase):
         self.window.deleteLater()
         APP.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         self.hotkeys_patch.stop()
+        self.startup_patch.stop()
         self.env.stop()
         self.temp.cleanup()
 
@@ -98,6 +104,38 @@ class WindowTests(unittest.TestCase):
         self.assertFalse(self.window.isVisible())
         self.window._on_tray_activated(main.QSystemTrayIcon.ActivationReason.DoubleClick)
         self.assertTrue(self.window.isVisible())
+
+    def test_startup_and_hotkeys_are_disabled_by_default(self):
+        self.assertFalse(self.window._startup_cb.isChecked())
+        for edit in self.window._shortcut_edits.values():
+            self.assertTrue(edit.keySequence().isEmpty())
+        self.window._hotkeys.configure.assert_called_once_with({'lock': '', 'settings': ''})
+
+    def test_startup_toggle_and_failure_restore_checkbox(self):
+        with patch.object(startup, 'set_enabled') as write:
+            self.window._startup_cb.setChecked(True)
+            write.assert_called_once_with(True)
+        with patch.object(startup, 'set_enabled', side_effect=PermissionError), \
+             patch.object(main.QMessageBox, 'warning') as warning:
+            self.window._startup_cb.setChecked(False)
+            self.assertTrue(self.window._startup_cb.isChecked())
+            warning.assert_called_once()
+
+    def test_idle_screensaver_toggle_preserves_timeout_and_persists(self):
+        tab = self.window._screensaver_tab
+        tab._timeout_spin.setValue(300)
+        tab._idle_enabled.setChecked(False)
+        self.assertFalse(tab._timeout_spin.isEnabled())
+        self.assertFalse(settings.load()['screensaver_enabled'])
+        self.assertEqual(settings.load()['idle_timeout'], 300)
+        restored = main.ScreensaverTab(settings.load())
+        self.assertFalse(restored._idle_enabled.isChecked())
+        self.assertFalse(restored._timeout_spin.isEnabled())
+        tab._idle_enabled.setChecked(True)
+        self.assertTrue(tab._timeout_spin.isEnabled())
+        self.assertTrue(settings.load()['screensaver_enabled'])
+        self.assertEqual(settings.load()['idle_timeout'], 300)
+        restored.deleteLater()
 
     def test_theme_password_and_shortcut_changes_share_current_settings(self):
         w = self.window
@@ -165,6 +203,25 @@ class WindowTests(unittest.TestCase):
 
 
 class LockTests(unittest.TestCase):
+    def test_disabled_screensaver_never_arms_timer_or_hides_password(self):
+        state = blind.BlindState({'screensaver_enabled': False, 'idle_timeout': 10})
+        state.show_password_input()
+        state.start_idle_timer()
+        self.assertFalse(state._idle_timer.isActive())
+        state.on_mouse_move()
+        self.assertFalse(state._idle_timer.isActive())
+        state._on_idle()  # Even an already queued timeout must be harmless.
+        self.assertFalse(state.in_screensaver)
+        self.assertTrue(state.showing_password)
+        state.deleteLater()
+
+    def test_existing_settings_keep_idle_screensaver_enabled(self):
+        state = blind.BlindState({'idle_timeout': 120})
+        state.start_idle_timer()
+        self.assertTrue(state._idle_timer.isActive())
+        self.assertEqual(state._idle_timer.interval(), 120000)
+        state.deleteLater()
+
     def test_wrong_password_stays_locked_correct_password_unlocks(self):
         state = blind.BlindState({'password_hash': auth.hash_password('test-only')})
         unlocked = Mock()
@@ -204,6 +261,32 @@ class InstanceTests(unittest.TestCase):
             third = InstanceGuard(Path(folder))
             self.assertTrue(third.acquire())
             third.close()
+
+
+class StartupTests(unittest.TestCase):
+    def test_enable_disable_in_isolated_registry_key(self):
+        # Exercise the real registry API without modifying the user's Run key.
+        key_path = r'Software\ScreenBlind-Test-' + uuid.uuid4().hex
+        with patch.object(startup, 'RUN_KEY', key_path):
+            try:
+                self.assertFalse(startup.is_enabled())
+                startup.set_enabled(True)
+                self.assertTrue(startup.is_enabled())
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+                    command, value_type = winreg.QueryValueEx(key, startup.VALUE_NAME)
+                self.assertEqual(value_type, winreg.REG_SZ)
+                self.assertEqual(command, startup.startup_command())
+                self.assertTrue(command.endswith(' --startup'))
+                startup.set_enabled(False)
+                self.assertFalse(startup.is_enabled())
+                startup.set_enabled(False)  # Already disabled is harmless.
+            finally:
+                winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key_path)
+
+    def test_packaged_command_quotes_executable_with_spaces(self):
+        with patch.object(startup.sys, 'frozen', True, create=True), \
+             patch.object(startup.sys, 'executable', r'C:\My Apps\ScreenBlind.exe'):
+            self.assertEqual(startup.startup_command(), '"C:\\My Apps\\ScreenBlind.exe" --startup')
 
 
 if __name__ == '__main__':

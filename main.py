@@ -47,6 +47,7 @@ from PyQt6.QtWidgets import (
 import auth
 import dpi
 import settings as cfg_mod
+import startup
 from blind import BlindManager
 from hotkeys import GlobalHotkeys
 from themes import apply_theme
@@ -390,6 +391,9 @@ class ScreensaverTab(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
 
         # Idle timeout
+        self._idle_enabled = QCheckBox("空闲后自动启动屏保")
+        self._idle_enabled.setChecked(cfg.get("screensaver_enabled", True))
+        layout.addWidget(self._idle_enabled)
         layout.addWidget(_label("空闲多久后启动屏保："))
         row1 = QHBoxLayout()
         self._timeout_spin = QSpinBox()
@@ -397,6 +401,8 @@ class ScreensaverTab(QWidget):
         self._timeout_spin.setValue(cfg.get("idle_timeout", 120))
         self._timeout_spin.setSuffix("  秒")
         self._timeout_spin.setFixedWidth(160)
+        self._timeout_spin.setEnabled(self._idle_enabled.isChecked())
+        self._idle_enabled.toggled.connect(self._save_idle_enabled)
         self._timeout_spin.valueChanged.connect(self._save_timeout)
         row1.addWidget(self._timeout_spin)
         row1.addStretch()
@@ -441,6 +447,11 @@ class ScreensaverTab(QWidget):
 
         layout.addStretch()
 
+    def _save_idle_enabled(self, enabled: bool):
+        self._cfg["screensaver_enabled"] = enabled
+        self._timeout_spin.setEnabled(enabled)
+        cfg_mod.save(self._cfg)
+
     def _save_timeout(self, val: int):
         self._cfg["idle_timeout"] = val
         cfg_mod.save(self._cfg)
@@ -466,7 +477,7 @@ class ScreensaverTab(QWidget):
 # About tab
 # ---------------------------------------------------------------------------
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 WEBSITE_URL = "https://screenblind.cc"
 DONATE_URL  = "https://www.paypal.com/donate/?hosted_button_id=ZXKFFGA7W6Y5E"
 
@@ -757,6 +768,18 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(12)
+        self._startup_cb = QCheckBox("开机自启动（登录 Windows 后驻留托盘）")
+        self._startup_status = _label("默认关闭；开启后请保留当前程序的位置。", secondary=True)
+        self._startup_status.setWordWrap(True)
+        try:
+            self._startup_cb.setChecked(startup.is_enabled())
+        except OSError:
+            self._startup_cb.setEnabled(False)
+            self._startup_status.setText("无法读取开机自启动设置，请检查当前用户的注册表访问权限。")
+        self._startup_cb.toggled.connect(self._change_startup)
+        layout.addWidget(self._startup_cb)
+        layout.addWidget(self._startup_status)
+        layout.addWidget(_sep())
         layout.addWidget(_label("界面主题"))
         self._theme_combo = QComboBox()
         self._theme_combo.addItem("深色", "dark")
@@ -773,6 +796,9 @@ class MainWindow(QMainWindow):
             row.addWidget(_label(label))
             edit = QKeySequenceEdit(QKeySequence(self._cfg[key]))
             edit.setAccessibleName(label + "快捷键")
+            line_edit = edit.findChild(QLineEdit)
+            if line_edit:
+                line_edit.setPlaceholderText("未设置，点击后按组合键")
             row.addWidget(edit, 1)
             clear = QPushButton("清除")
             clear.clicked.connect(edit.clear)
@@ -794,6 +820,17 @@ class MainWindow(QMainWindow):
         layout.addWidget(note)
         layout.addStretch()
         return tab
+
+    def _change_startup(self, enabled):
+        try:
+            startup.set_enabled(enabled)
+        except OSError:
+            self._startup_cb.blockSignals(True)
+            self._startup_cb.setChecked(not enabled)
+            self._startup_cb.blockSignals(False)
+            QMessageBox.warning(self, "设置失败", "无法更新开机自启动设置，请检查当前用户的注册表访问权限。")
+            return
+        self._startup_status.setText("已开启：下次登录 Windows 后将自动驻留托盘。" if enabled else "已关闭开机自启动。")
 
     def _change_theme(self):
         theme = self._theme_combo.currentData()
@@ -864,7 +901,8 @@ def main():
     win = MainWindow()
 
     guard.activated.connect(win.show_normal)
-    win.show()
+    if "--startup" not in sys.argv:
+        win.show()
     sys.exit(app.exec())
 
 

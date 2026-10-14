@@ -4,11 +4,12 @@ from pathlib import Path
 
 DEFAULTS: dict = {
     "theme": "dark",
-    "lock_hotkey": "Ctrl+Alt+L",
-    "settings_hotkey": "Ctrl+Alt+S",
+    "lock_hotkey": "",
+    "settings_hotkey": "",
     "password_hash": "",
     "locked_screens": [],
     "idle_timeout": 120,          # seconds before screensaver starts
+    "screensaver_enabled": True,
     # "bubbles" | "matrix" | "flurry" | "slideshow" | "none"
     "screensaver_type": "bubbles",
     "slideshow_folder": "",
