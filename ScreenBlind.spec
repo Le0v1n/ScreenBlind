@@ -1,5 +1,18 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
+import sys
+from pathlib import Path
+
+# Resolve dependencies from this interpreter and Windows only. Unrelated Python
+# distributions on PATH can otherwise inject an old ucrtbase.dll into the exe,
+# producing a QtCore DLL-load error even when source execution succeeds.
+windows = Path(os.environ.get('SystemRoot', r'C:\Windows'))
+os.environ['PATH'] = os.pathsep.join(map(str, (
+    Path(sys.executable).parent, Path(sys.base_prefix),
+    Path(sys.base_prefix) / 'DLLs', windows / 'System32', windows,
+)))
+
 # Declaring Per-Monitor V2 in the manifest makes the executable DPI-aware from
 # the moment Windows loads it, before any of our code or Qt runs. main() also
 # requests it at runtime, but the manifest is what removes the need for the
