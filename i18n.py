@@ -35,6 +35,7 @@ def tr(source, **values):
 
 
 ZH_CN = {
+    'Enhancements: {name}\nContact: {email}': '增强版贡献者：{name}\n联系邮箱：{email}',
     'Select displays to lock:': '选择需要锁定的显示器：',
     '↻  Refresh displays': '↻  刷新显示器',
     '🔢  Identify displays': '🔢  识别显示器',

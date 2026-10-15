@@ -481,7 +481,9 @@ class ScreensaverTab(QWidget):
 # About tab
 # ---------------------------------------------------------------------------
 
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.5"
+CONTRIBUTOR_NAME = "Lyle"
+CONTRIBUTOR_EMAIL = "zjkljd@163.com"
 WEBSITE_URL = "https://screenblind.cc"
 DONATE_URL  = "https://www.paypal.com/donate/?hosted_button_id=ZXKFFGA7W6Y5E"
 
@@ -559,6 +561,13 @@ class AboutTab(QWidget):
         about_text.setWordWrap(True)
         about_text.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         layout.addWidget(about_text)
+
+        contributor = QLabel(tr("Enhancements: {name}\nContact: {email}",
+                               name=CONTRIBUTOR_NAME, email=CONTRIBUTOR_EMAIL))
+        contributor.setWordWrap(True)
+        contributor.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        contributor.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(contributor)
 
         layout.addSpacing(12)
 

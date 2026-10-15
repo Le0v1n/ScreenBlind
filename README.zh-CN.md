@@ -2,6 +2,8 @@
 
 基于 [hemigapp/ScreenBlind](https://github.com/hemigapp/ScreenBlind) 的 Windows 多显示器隐私遮挡工具，保留原项目 MIT 许可与作者署名。
 
+增强版贡献者：**Lyle** · 联系邮箱：[zjkljd@163.com](mailto:zjkljd@163.com)。
+
 ## 本分支新增
 
 - **托盘驻留**：关闭设置窗口后继续运行；解锁后自动回到托盘，不弹出设置窗口。双击托盘图标恢复窗口，右键菜单支持打开设置、立即锁定、退出软件。
