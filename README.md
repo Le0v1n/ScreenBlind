@@ -39,7 +39,7 @@ and keyboard input stays captured by the lock; the unlocked monitor is for
 
 ## Desktop settings
 
-- **Tray residency** — closing the settings window keeps ScreenBlind running. Double-click the tray icon to reopen settings; right-click → Exit to quit after unlocking.
+- **Tray residency** — closing the settings window keeps ScreenBlind running. Unlocking returns to the tray without opening settings or taking focus. Double-click the tray icon to reopen settings; right-click → Exit to quit after unlocking.
 - **Language** — choose System default, English or 简体中文 in General. Changes apply immediately to settings, tray menus, dialogs, lock-screen hints and dates. The selection is saved; unsaved password fields and hotkey drafts survive language changes. System default uses Chinese on Chinese systems and English elsewhere.
 - **Themes** — switch between dark and light settings UI; lock overlays keep their dark background.
 - **Global hotkeys** — configure Lock now and Open settings in General. Both are empty by default. Conflicting combinations are rejected without losing the previous working hotkeys. Hotkeys cannot unlock the screens.

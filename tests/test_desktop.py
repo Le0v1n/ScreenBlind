@@ -202,6 +202,7 @@ class WindowTests(unittest.TestCase):
 
     def test_lock_is_not_reentered_and_settings_cannot_cover_overlay(self):
         w = self.window
+        w.show()
         w._cfg['password_hash'] = auth.hash_password('test-only')
         w._monitors_tab._items[0][0].setCheckState(Qt.CheckState.Checked)
         with patch.object(main, 'BlindManager') as manager:
@@ -214,6 +215,15 @@ class WindowTests(unittest.TestCase):
             self.assertFalse(w._exit_action.isEnabled())
             w._on_unlocked()
             self.assertTrue(w._exit_action.isEnabled())
+            self.assertFalse(w.isVisible())
+            self.assertTrue(w._tray.isVisible())
+            self.assertIsNone(w._blind_manager)
+            # A new lock can start from the tray without reopening settings.
+            w._on_lock_clicked()
+            self.assertEqual(manager.call_count, 2)
+            w._on_unlocked()
+            self.assertFalse(w.isVisible())
+            w._on_tray_activated(main.QSystemTrayIcon.ActivationReason.DoubleClick)
             self.assertTrue(w.isVisible())
 
     def test_lock_preconditions_show_settings_instead_of_hiding_errors(self):
