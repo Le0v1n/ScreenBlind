@@ -1,10 +1,12 @@
 import math
 import random
+import os
 from collections import deque
 from pathlib import Path
 
 from i18n import tr
-from PyQt6.QtCore import QLineF, QObject, QRect, QRectF, QTimer
+from PyQt6.QtCore import QLineF, QObject, QRect, QRectF, QTimer, pyqtSignal
+from settings import get_slideshow_folders
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -23,6 +25,7 @@ from PyQt6.QtCore import Qt
 
 class BaseAnimation(QObject):
     FPS = 30
+    updated = pyqtSignal()
 
     # Alpha of the black veil the overlay lays over the animation, so the
     # clock stays readable. Bright, sparse animations want less of it.
@@ -35,13 +38,14 @@ class BaseAnimation(QObject):
     def __init__(self, widget):
         super().__init__(widget)
         self.widget = widget
+        self.updated.connect(widget.update)
         self._timer = QTimer(self)
         self._timer.setInterval(1000 // self.FPS)
         self._timer.timeout.connect(self._tick)
 
     def _tick(self):
         self.advance()
-        self.widget.update()
+        self.updated.emit()
 
     def start(self):
         self.reset()
@@ -442,10 +446,12 @@ SUPPORTED_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 class SlideshowAnimation(BaseAnimation):
     FPS = 30
+    FADE_MS = 750  # Complete transitions even at the minimum one-second interval.
 
-    def __init__(self, widget, folder: str, interval_sec: int = 5):
+    def __init__(self, widget, folders: list[str] | str, interval_sec: int = 5):
         super().__init__(widget)
-        self._folder = folder
+        folders = [folders] if isinstance(folders, str) else list(folders)
+        self._folders = [folder for folder in folders if folder]
         self._interval_ms = max(1, interval_sec) * 1000
         self._images: list[Path] = []
         self._idx = 0
@@ -460,12 +466,17 @@ class SlideshowAnimation(BaseAnimation):
 
     def reset(self):
         self._images = []
-        if self._folder:
-            p = Path(self._folder)
-            if p.is_dir():
-                self._images = [f for f in p.iterdir()
-                                if f.suffix.lower() in SUPPORTED_EXT]
-                random.shuffle(self._images)
+        seen = set()
+        for folder in self._folders:
+            try:
+                for image in Path(folder).iterdir():
+                    key = os.path.normcase(str(image.resolve()))
+                    if image.is_file() and image.suffix.lower() in SUPPORTED_EXT and key not in seen:
+                        seen.add(key)
+                        self._images.append(image)
+            except OSError:
+                continue  # A missing/unreadable folder must not prevent locking.
+        random.shuffle(self._images)
         self._idx = 0
         self._current = self._load(0)
         self._next = None
@@ -473,11 +484,17 @@ class SlideshowAnimation(BaseAnimation):
         self._transitioning = False
 
     def _load(self, idx: int) -> QPixmap | None:
-        if not self._images:
-            return None
-        return QPixmap(str(self._images[idx % len(self._images)]))
+        for offset in range(len(self._images)):
+            candidate = (idx + offset) % len(self._images)
+            pixmap = QPixmap(str(self._images[candidate]))
+            if not pixmap.isNull():
+                self._idx = candidate
+                return pixmap
+        return None
 
     def start(self):
+        if self._timer.isActive():
+            return  # Multiple synchronized views share this animation and timeline.
         super().start()
         if len(self._images) > 1:
             self._slide_timer.start(self._interval_ms)
@@ -496,7 +513,7 @@ class SlideshowAnimation(BaseAnimation):
 
     def advance(self):
         if self._transitioning:
-            self._alpha = max(0.0, self._alpha - 0.025)
+            self._alpha = max(0.0, self._alpha - 1000 / (self.FPS * self.FADE_MS))
             if self._alpha <= 0.0:
                 self._current = self._next
                 self._next = None
@@ -509,7 +526,7 @@ class SlideshowAnimation(BaseAnimation):
             font = QFont("Segoe UI", 16)
             painter.setFont(font)
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter,
-                             tr('No images found in the selected folder'))
+                             tr('No images found in the selected folders'))
             return
 
         def blit(px: QPixmap, opacity: float):
@@ -545,7 +562,7 @@ def make_animation(name: str, widget, settings: dict) -> BaseAnimation | None:
     if name == "slideshow":
         return SlideshowAnimation(
             widget,
-            settings.get("slideshow_folder", ""),
+            get_slideshow_folders(settings),
             settings.get("slideshow_interval", 5),
         )
     return None

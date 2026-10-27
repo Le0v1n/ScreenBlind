@@ -46,7 +46,10 @@ Enhancements contributed by **Lyle** · [zjkljd@163.com](mailto:zjkljd@163.com).
 - **Themes** — switch between dark and light settings UI; lock overlays keep their dark background.
 - **Global hotkeys** — configure Lock now and Open settings in General. Both are empty by default. Conflicting combinations are rejected without losing the previous working hotkeys. Hotkeys cannot unlock the screens.
 - **Start with Windows** — off by default. When enabled, ScreenBlind starts in the tray after sign-in, without opening settings. Keep the executable at the registered location.
-- **Optional idle screensaver** — uncheck Start the screensaver when idle to disable the animation timer while keeping the chosen timeout. This does not automatically lock an unlocked desktop.
+- **Optional idle screensaver** — the timeout accepts 0 seconds for immediate playback after locking. Uncheck Start the screensaver when idle to disable the animation timer while keeping the timeout. Password entry pauses playback; with 0 seconds, cancelling returns immediately to the screensaver. This does not automatically lock an unlocked desktop.
+- **Multi-display slideshow** — selected displays show the same picture and synchronized transitions by default. Uncheck Show the same image on all locked displays for independent playback.
+- **Multiple picture folders** — use Add folder repeatedly, then Remove selected folders to manage the combined playlist. Legacy single-folder settings migrate automatically; unavailable folders and invalid images are skipped.
+- **Display names** — select a display and choose Rename selected display. Names are stored against Windows display identifiers and appear in settings, identification cards and lock overlays; leave the name empty to reset it.
 - **Instant password unlock** — the first keypress only opens the password prompt and never contributes to the password. Click or press any key, then type the complete password to unlock immediately without Enter. Once the prompt is open, spaces count as password characters, Esc cancels and Enter submits. Incorrect partial input stays editable with Backspace.
 - **Single instance** — launching again reopens the existing settings window. Opening settings, exiting and repeated lock actions are blocked while locked.
 
@@ -148,7 +151,7 @@ the attacker now needs both passwords.
 | Enable idle screensaver | Screensaver tab                   | On            |
 | Idle → screensaver   | Screensaver tab                      | 120 seconds   |
 | Animation style      | Screensaver tab                      | Bubbles       |
-| Slideshow folder     | Screensaver tab                      | (none)        |
+| Slideshow folders    | Screensaver tab                      | (none)        |
 | Slideshow interval   | Screensaver tab                      | 5 seconds     |
 
 Stored as JSON in `%APPDATA%\ScreenBlind\settings.json`. The optional login startup command is stored in the current user’s Windows Run key.

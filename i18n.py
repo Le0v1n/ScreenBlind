@@ -35,6 +35,15 @@ def tr(source, **values):
 
 
 ZH_CN = {
+    'Rename selected display…': '重命名选中屏幕…',
+    'Rename display': '重命名屏幕',
+    'Display name (leave empty to reset):': '屏幕名称（留空恢复默认）：',
+    '0 seconds starts the selected screensaver immediately after locking.': '设为 0 秒时，锁屏后立即启动所选屏保。',
+    'Show the same image on all locked displays': '所有锁定屏幕同步显示同一张图片',
+    'Enabled by default: images and transitions are synchronized. Turn off for independent slideshows.': '默认开启，图片和切换进度保持同步；关闭后各屏幕独立轮播。',
+    'Add multiple folders one at a time. Images are combined into one playlist.': '可重复添加多个文件夹，图片将合并到同一播放列表。',
+    'Add folder…': '添加文件夹…',
+    'Remove selected folders': '移除所选文件夹',
     'Enhancements: {name}\nContact: {email}': '增强版贡献者：{name}\n联系邮箱：{email}',
     'Select displays to lock:': '选择需要锁定的显示器：',
     '↻  Refresh displays': '↻  刷新显示器',
@@ -128,7 +137,7 @@ ZH_CN = {
     'Enter password': '输入密码',
     'Correct password unlocks    Esc  Cancel': '密码正确即解锁    Esc  取消',
     'Press any key or click to enter your password': '按任意键或点击以输入密码',
-    'No images found in the selected folder': '所选文件夹中没有找到图片',
+    'No images found in the selected folders': '所选文件夹中没有找到图片',
     'Use a single key combination.': '快捷键只能包含一组按键。',
     'Include Ctrl or Alt. The Windows key is not supported.': '请使用 Ctrl 或 Alt 作为组合键；不支持 Windows 键。',
     'Use a letter A–Z, digit 0–9 or F1–F11 as the main key.': '主键支持 A–Z、0–9 或 F1–F11。',

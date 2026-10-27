@@ -30,6 +30,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QInputDialog,
     QKeySequenceEdit,
     QLayout,
     QListWidget,
@@ -55,6 +56,7 @@ from hotkeys import GlobalHotkeys
 from themes import apply_theme
 from instance import InstanceGuard
 from i18n import configure_language
+from displays import display_name, screen_key
 
 
 # ---------------------------------------------------------------------------
@@ -117,10 +119,11 @@ def _app_icon() -> QIcon:
 class _ScreenIdentifierOverlay(QWidget):
     """A frameless top-most card showing a big number on a single screen."""
 
-    def __init__(self, screen, number: int):
+    def __init__(self, screen, number: int, name: str = ''):
         super().__init__(None)
         self._screen = screen
         self._number = number
+        self._name = name
 
         self.setWindowFlags(
             Qt.WindowType.Window
@@ -161,6 +164,10 @@ class _ScreenIdentifierOverlay(QWidget):
         sub_font.setWeight(QFont.Weight.Medium)
         painter.setFont(sub_font)
         painter.setPen(QColor(165, 180, 252, 200))
+        if self._name:
+            label = painter.fontMetrics().elidedText(self._name, Qt.TextElideMode.ElideRight, rect.width() - 24)
+            painter.drawText(rect.adjusted(0, 0, 0, -44),
+                             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom, label)
         painter.drawText(
             rect.adjusted(0, 0, 0, -22),
             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
@@ -204,6 +211,10 @@ class MonitorsTab(QWidget):
         identify_btn.clicked.connect(self.identify_screens)
         row.addWidget(identify_btn)
 
+        self._rename_btn = QPushButton(tr('Rename selected display…'))
+        self._rename_btn.clicked.connect(self._rename_screen)
+        row.addWidget(self._rename_btn)
+
         row.addStretch()
         layout.addLayout(row)
 
@@ -218,7 +229,7 @@ class MonitorsTab(QWidget):
         """Flash a big number on every connected screen for ~3 seconds."""
         self._dismiss_identifiers()
         for i, screen in enumerate(QApplication.screens()):
-            ov = _ScreenIdentifierOverlay(screen, i + 1)
+            ov = _ScreenIdentifierOverlay(screen, i + 1, display_name(screen, i, self._cfg))
             ov.show()
             self._identify_overlays.append(ov)
         QTimer.singleShot(3000, self._dismiss_identifiers)
@@ -239,12 +250,13 @@ class MonitorsTab(QWidget):
         for i, screen in enumerate(screens):
             native = dpi.native_geometry(screen)
             label = (
-                tr("Display {number}", number=i + 1)
+                display_name(screen, i, self._cfg)
                 + (tr(' (Primary)') if screen is primary else "")
                 + f"  —  {_resolution_text(screen)}"
                 + tr("  at ({x}, {y})", x=native.x(), y=native.y())
             )
             item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, screen_key(screen))
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(
                 Qt.CheckState.Checked if i in locked else Qt.CheckState.Unchecked
@@ -253,6 +265,28 @@ class MonitorsTab(QWidget):
             self._items.append((item, i))
 
         self._list.blockSignals(False)
+        self._rename_btn.setEnabled(bool(self._items))
+        if self._items:
+            self._list.setCurrentRow(0)
+
+    def _rename_screen(self):
+        item = self._list.currentItem()
+        if item is None:
+            return
+        key = item.data(Qt.ItemDataRole.UserRole)
+        names = dict(self._cfg.get('screen_names', {}))
+        name, accepted = QInputDialog.getText(self, tr('Rename display'),
+                                            tr('Display name (leave empty to reset):'),
+                                            text=names.get(key, ''))
+        if not accepted:
+            return
+        if name.strip():
+            names[key] = name.strip()
+        else:
+            names.pop(key, None)
+        self._cfg['screen_names'] = names
+        cfg_mod.save(self._cfg)
+        self.refresh()
 
     def _on_change(self, _item):
         self._cfg["locked_screens"] = [
@@ -385,12 +419,16 @@ class SecurityTab(QWidget):
 # Screensaver tab
 # ---------------------------------------------------------------------------
 
-class ScreensaverTab(QWidget):
+class ScreensaverTab(QScrollArea):
     def __init__(self, cfg: dict):
         super().__init__()
         self._cfg = cfg
 
-        layout = QVBoxLayout(self)
+        self.setWidgetResizable(True)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         layout.setSpacing(12)
         layout.setContentsMargins(16, 16, 16, 16)
 
@@ -401,7 +439,7 @@ class ScreensaverTab(QWidget):
         layout.addWidget(_label(tr('Start screensaver after idle:')))
         row1 = QHBoxLayout()
         self._timeout_spin = QSpinBox()
-        self._timeout_spin.setRange(10, 3600)
+        self._timeout_spin.setRange(0, 3600)
         self._timeout_spin.setValue(cfg.get("idle_timeout", 120))
         self._timeout_spin.setSuffix(tr('  seconds'))
         self._timeout_spin.setFixedWidth(160)
@@ -411,6 +449,7 @@ class ScreensaverTab(QWidget):
         row1.addWidget(self._timeout_spin)
         row1.addStretch()
         layout.addLayout(row1)
+        layout.addWidget(_label(tr('0 seconds starts the selected screensaver immediately after locking.'), secondary=True))
 
         layout.addWidget(_sep())
 
@@ -427,13 +466,26 @@ class ScreensaverTab(QWidget):
 
         # Slideshow options
         layout.addWidget(_label(tr('Slideshow options:')))
-        self._folder_lbl = _label(cfg.get("slideshow_folder") or tr('No folder selected'), secondary=True)
-        layout.addWidget(self._folder_lbl)
+        self._sync_slideshow = QCheckBox(tr('Show the same image on all locked displays'))
+        self._sync_slideshow.setChecked(cfg.get('slideshow_sync', True))
+        self._sync_slideshow.toggled.connect(self._save_sync)
+        layout.addWidget(self._sync_slideshow)
+        layout.addWidget(_label(tr('Enabled by default: images and transitions are synchronized. Turn off for independent slideshows.'), secondary=True))
+        self._folder_list = QListWidget()
+        self._folder_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self._folder_list.setMinimumHeight(100)
+        self._folder_list.setMaximumHeight(160)
+        self._folder_list.addItems(cfg_mod.get_slideshow_folders(cfg))
+        layout.addWidget(self._folder_list)
+        layout.addWidget(_label(tr('Add multiple folders one at a time. Images are combined into one playlist.'), secondary=True))
 
         row2 = QHBoxLayout()
-        browse_btn = QPushButton(tr('Browse folder…'))
+        browse_btn = QPushButton(tr('Add folder…'))
         browse_btn.clicked.connect(self._browse_folder)
         row2.addWidget(browse_btn)
+        remove_btn = QPushButton(tr('Remove selected folders'))
+        remove_btn.clicked.connect(self._remove_folders)
+        row2.addWidget(remove_btn)
         row2.addStretch()
         layout.addLayout(row2)
 
@@ -450,6 +502,7 @@ class ScreensaverTab(QWidget):
         layout.addLayout(row3)
 
         layout.addStretch()
+        self.setWidget(content)
 
     def _save_idle_enabled(self, enabled: bool):
         self._cfg["screensaver_enabled"] = enabled
@@ -468,9 +521,26 @@ class ScreensaverTab(QWidget):
     def _browse_folder(self):
         folder = QFileDialog.getExistingDirectory(self, tr('Select image folder'))
         if folder:
-            self._cfg["slideshow_folder"] = folder
-            self._folder_lbl.setText(folder)
-            cfg_mod.save(self._cfg)
+            folders = [self._folder_list.item(i).text() for i in range(self._folder_list.count())]
+            folders = cfg_mod.get_slideshow_folders({'slideshow_folders': folders + [folder]})
+            self._folder_list.clear()
+            self._folder_list.addItems(folders)
+            self._save_folders()
+
+    def _remove_folders(self):
+        for item in self._folder_list.selectedItems():
+            self._folder_list.takeItem(self._folder_list.row(item))
+        self._save_folders()
+
+    def _save_folders(self):
+        folders = [self._folder_list.item(i).text() for i in range(self._folder_list.count())]
+        self._cfg['slideshow_folders'] = folders
+        self._cfg['slideshow_folder'] = folders[0] if folders else ''
+        cfg_mod.save(self._cfg)
+
+    def _save_sync(self, enabled):
+        self._cfg['slideshow_sync'] = enabled
+        cfg_mod.save(self._cfg)
 
     def _save_interval(self, val: int):
         self._cfg["slideshow_interval"] = val
@@ -481,7 +551,7 @@ class ScreensaverTab(QWidget):
 # About tab
 # ---------------------------------------------------------------------------
 
-APP_VERSION = "1.5.2"
+APP_VERSION = "1.6"
 CONTRIBUTOR_NAME = "Lyle"
 CONTRIBUTOR_EMAIL = "zjkljd@163.com"
 WEBSITE_URL = "https://screenblind.cc"

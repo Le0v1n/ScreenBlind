@@ -1,5 +1,7 @@
 """Shared light/dark palette for windows, dialogs and tray menus."""
 from PyQt6.QtGui import QColor, QPalette
+from pathlib import Path
+import sys
 
 PALETTES = {
     'dark': dict(bg='#10121b', panel='#191c2a', input='#131622', text='#edf0fa',
@@ -12,7 +14,9 @@ PALETTES = {
 
 
 def apply_theme(app, theme: str):
-    c = PALETTES.get(theme, PALETTES['dark'])
+    c = dict(PALETTES.get(theme, PALETTES['dark']))
+    base = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
+    c['checkmark'] = (base / 'media_assets' / 'checkmark.svg').as_posix()
     palette = QPalette()
     for role, value in {
         QPalette.ColorRole.Window: c['bg'], QPalette.ColorRole.WindowText: c['text'],
@@ -49,7 +53,7 @@ def apply_theme(app, theme: str):
         QListWidget::item:selected {{ background: {hover}; color: {text}; }}
         QCheckBox {{ spacing: 9px; }}
         QCheckBox::indicator {{ width: 18px; height: 18px; border-radius: 4px; border: 1px solid {muted}; background: {input}; }}
-        QCheckBox::indicator:checked {{ background: #6366f1; border: 3px solid {accent}; }}
+        QCheckBox::indicator:checked {{ background: #6366f1; border: 1px solid #6366f1; image: url("{checkmark}"); }}
         QFrame[role="separator"] {{ background: {border}; max-height: 1px; margin: 5px 0; }}
         QMenu {{ background: {panel}; color: {text}; border: 1px solid {border}; padding: 5px; }}
         QMenu::item {{ padding: 8px 18px; }}

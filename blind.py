@@ -33,6 +33,7 @@ from PyQt6.QtWidgets import QApplication, QWidget
 
 import animations as anim_module
 import dpi
+from displays import display_name
 from auth import verify_password
 
 
@@ -226,7 +227,13 @@ class BlindState(QObject):
         if not self._cfg.get("screensaver_enabled", True):
             self._idle_timer.stop()
             return
-        ms = max(10, self._cfg.get("idle_timeout", 120)) * 1000
+        seconds = max(0, self._cfg.get("idle_timeout", 120))
+        if seconds == 0:
+            self._idle_timer.stop()
+            if not self.showing_password and not self.in_screensaver:
+                self._on_idle()
+            return
+        ms = seconds * 1000
         self._idle_timer.start(ms)
 
     def reset_idle_timer(self):
@@ -271,6 +278,7 @@ class BlindState(QObject):
             self.in_screensaver = False  # stop screensaver when prompt appears
             self._cursor_timer.start()
             self.updated.emit()
+            self.start_idle_timer()
 
     def hide_password_input(self):
         self._cursor_timer.stop()
@@ -280,6 +288,7 @@ class BlindState(QObject):
         self.shake_offset = 0
         self.cursor_visible = True
         self.updated.emit()
+        self.start_idle_timer()
 
     def _blink_cursor(self):
         self.cursor_visible = not self.cursor_visible
@@ -315,6 +324,7 @@ class BlindState(QObject):
     def handle_char(self, ch: str):
         if self._unlock_emitted:
             return
+        self.start_idle_timer()
         self.password_buffer += ch
         self.updated.emit()
         self._try_unlock()
@@ -322,6 +332,7 @@ class BlindState(QObject):
     def handle_backspace(self):
         if self._unlock_emitted:
             return
+        self.start_idle_timer()
         if self.password_buffer:
             self.password_buffer = self.password_buffer[:-1]
             self.updated.emit()
@@ -339,6 +350,7 @@ class BlindState(QObject):
         return False
 
     def attempt_unlock(self):
+        self.start_idle_timer()
         if not self._try_unlock():
             self.password_buffer = ""
             self._wrong = True
@@ -380,18 +392,20 @@ _MODIFIER_KEYS = {
 
 
 class BlindOverlay(QWidget):
-    def __init__(self, geo: QRect, state: BlindState, cfg: dict):
+    def __init__(self, geo: QRect, state: BlindState, cfg: dict,
+                 screen_name: str = '', slideshow=None):
         super().__init__(None)
         self._geo = geo          # Qt logical pixels — for setGeometry()
         self._phys = QRect(geo)  # physical pixels — for every Win32 call
         self._state = state
         self._cfg = cfg
+        self._screen_name = screen_name
         self._animation: anim_module.BaseAnimation | None = None
         self._ss_active = False
         self._allow_close = False   # only the unlock flow may close us
 
         self._setup_window()
-        self._setup_animation()
+        self._setup_animation(slideshow)
         self._setup_timers()
 
         state.updated.connect(self.update)
@@ -410,9 +424,13 @@ class BlindOverlay(QWidget):
         self.setMouseTracking(True)
         self.setCursor(Qt.CursorShape.ArrowCursor)
 
-    def _setup_animation(self):
+    def _setup_animation(self, slideshow=None):
         name = self._cfg.get("screensaver_type", "bubbles")
-        self._animation = anim_module.make_animation(name, self, self._cfg)
+        if name == 'slideshow' and slideshow is not None:
+            self._animation = slideshow
+            slideshow.updated.connect(self.update)
+        else:
+            self._animation = anim_module.make_animation(name, self, self._cfg)
 
     def _setup_timers(self):
         self._clock_timer = QTimer(self)
@@ -496,6 +514,12 @@ class BlindOverlay(QWidget):
 
         # Clock (always visible)
         self._draw_clock(painter, rect)
+        if self._screen_name:
+            painter.setFont(QFont('Microsoft YaHei UI', 12))
+            painter.setPen(QColor(235, 235, 255, 210))
+            name = painter.fontMetrics().elidedText(self._screen_name, Qt.TextElideMode.ElideRight, max(0, rect.width() - 48))
+            painter.drawText(rect.adjusted(24, 20, -24, -20),
+                             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, name)
 
         # Password prompt or hint
         if self._state.showing_password:
@@ -698,12 +722,17 @@ class BlindManager(QObject):
         screens = QApplication.screens()
         locked_indices: list[int] = self._cfg.get("locked_screens", [])
         clip_rects: list[QRect] = []
+        shared_slideshow = None
 
         for idx in locked_indices:
             if not 0 <= idx < len(screens):
                 continue
             geo = screens[idx].geometry()
-            overlay = BlindOverlay(geo, self._state, self._cfg)
+            overlay = BlindOverlay(geo, self._state, self._cfg,
+                                   screen_name=display_name(screens[idx], idx, self._cfg),
+                                   slideshow=shared_slideshow)
+            if self._cfg.get('screensaver_type') == 'slideshow' and self._cfg.get('slideshow_sync', True):
+                shared_slideshow = overlay._animation
             overlay.show()
             # show() creates the native window, so Windows can now tell us
             # which monitor it landed on and how big that monitor really is.
