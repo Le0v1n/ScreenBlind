@@ -312,6 +312,41 @@ class LockTests(unittest.TestCase):
             overlay.deleteLater()
             state.deleteLater()
 
+    def test_wake_keys_open_empty_prompt_before_password_input(self):
+        for key, text in ((Qt.Key.Key_Space, ' '), (Qt.Key.Key_Escape, '\x1b'),
+                          (Qt.Key.Key_Return, '\r'), (Qt.Key.Key_Enter, '\r')):
+            with self.subTest(key=key):
+                state = blind.BlindState({'password_hash': auth.hash_password('1024')})
+                unlocked = Mock()
+                state.unlocked.connect(unlocked)
+                overlay = blind.BlindOverlay(QRect(0, 0, 800, 600), state, {'screensaver_type': 'none'})
+                try:
+                    overlay.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier, text))
+                    self.assertTrue(state.showing_password)
+                    self.assertEqual(state.password_buffer, '')
+                    self.assertFalse(state.wrong)
+                    unlocked.assert_not_called()
+                    for char in '1024':
+                        overlay.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, ord(char), Qt.KeyboardModifier.NoModifier, char))
+                    unlocked.assert_called_once()
+                finally:
+                    overlay.deleteLater()
+                    state.deleteLater()
+
+    def test_space_after_prompt_opens_is_a_valid_password_character(self):
+        state = blind.BlindState({'password_hash': auth.hash_password(' 1024')})
+        unlocked = Mock()
+        state.unlocked.connect(unlocked)
+        overlay = blind.BlindOverlay(QRect(0, 0, 800, 600), state, {'screensaver_type': 'none'})
+        try:
+            overlay.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Space, Qt.KeyboardModifier.NoModifier, ' '))
+            for char in ' 1024':
+                overlay.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, ord(char), Qt.KeyboardModifier.NoModifier, char))
+            unlocked.assert_called_once()
+        finally:
+            overlay.deleteLater()
+            state.deleteLater()
+
     def test_longer_password_does_not_unlock_on_prefix(self):
         state = blind.BlindState({'password_hash': auth.hash_password('10240')})
         unlocked = Mock()
