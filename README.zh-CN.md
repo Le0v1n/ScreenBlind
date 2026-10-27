@@ -4,6 +4,8 @@
 
 增强版贡献者：**Lyle** · 联系邮箱：[zjkljd@163.com](mailto:zjkljd@163.com)。
 
+**最新版本：[v1.6.4 · Windows x64 下载](https://github.com/Le0v1n/ScreenBlind/releases/tag/v1.6.4)** · [更新日志](CHANGELOG.md)。无需安装 Python；更新前请从托盘退出旧版。
+
 ## 本分支新增
 
 - **托盘驻留**：关闭设置窗口后继续运行；解锁后自动回到托盘，不弹出设置窗口。双击托盘图标恢复窗口，右键菜单支持打开设置、立即锁定、退出软件。

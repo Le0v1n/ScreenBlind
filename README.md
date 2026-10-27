@@ -6,6 +6,8 @@
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
+[Download enhanced v1.6.4 for Windows x64](https://github.com/Le0v1n/ScreenBlind/releases/tag/v1.6.4) · [Release notes](CHANGELOG.md)
+
 **Lock what others shouldn't see. Unlock what matters.**
 
 Selective multi-monitor lock screen for Windows.
