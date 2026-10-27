@@ -471,6 +471,11 @@ class ScreensaverTab(QScrollArea):
         self._sync_slideshow.toggled.connect(self._save_sync)
         layout.addWidget(self._sync_slideshow)
         layout.addWidget(_label(tr('Enabled by default: images and transitions are synchronized. Turn off for independent slideshows.'), secondary=True))
+        self._recursive_slideshow = QCheckBox(tr('Include subfolders'))
+        self._recursive_slideshow.setChecked(cfg.get('slideshow_recursive', False))
+        self._recursive_slideshow.toggled.connect(self._save_recursive)
+        layout.addWidget(self._recursive_slideshow)
+        layout.addWidget(_label(tr('Off by default. Only images at least 1280 pixels wide and 720 pixels high are shown.'), secondary=True))
         self._folder_list = QListWidget()
         self._folder_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self._folder_list.setMinimumHeight(100)
@@ -546,12 +551,16 @@ class ScreensaverTab(QScrollArea):
         self._cfg["slideshow_interval"] = val
         cfg_mod.save(self._cfg)
 
+    def _save_recursive(self, enabled):
+        self._cfg['slideshow_recursive'] = enabled
+        cfg_mod.save(self._cfg)
+
 
 # ---------------------------------------------------------------------------
 # About tab
 # ---------------------------------------------------------------------------
 
-APP_VERSION = "1.6"
+APP_VERSION = "1.6.1"
 CONTRIBUTOR_NAME = "Lyle"
 CONTRIBUTOR_EMAIL = "zjkljd@163.com"
 WEBSITE_URL = "https://screenblind.cc"

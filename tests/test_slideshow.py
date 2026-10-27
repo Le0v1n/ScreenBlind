@@ -82,6 +82,21 @@ class SettingsTests(TemporarySettings):
         finally:
             tab.deleteLater()
 
+    def test_recursive_scanning_is_opt_in_and_persists(self):
+        tab = main.ScreensaverTab(settings.load())
+        try:
+            self.assertFalse(tab._recursive_slideshow.isChecked())
+            tab._recursive_slideshow.setChecked(True)
+            restored = main.ScreensaverTab(settings.load())
+            try:
+                self.assertTrue(restored._recursive_slideshow.isChecked())
+                restored._recursive_slideshow.setChecked(False)
+                self.assertFalse(settings.load()['slideshow_recursive'])
+            finally:
+                restored.deleteLater()
+        finally:
+            tab.deleteLater()
+
 
 class ImmediateTests(unittest.TestCase):
     def test_zero_starts_immediately_but_does_not_interrupt_password_entry(self):
@@ -153,7 +168,7 @@ class SlideshowTests(unittest.TestCase):
         self.folder_b = Path(self.temp.name) / 'b'
         for folder, color in ((self.folder_a, 'red'), (self.folder_b, 'green')):
             folder.mkdir()
-            image = QImage(16, 16, QImage.Format.Format_RGB32)
+            image = QImage(1280, 720, QImage.Format.Format_RGB32)
             image.fill(QColor(color))
             self.assertTrue(image.save(str(folder / 'picture.png')))
 
@@ -188,6 +203,55 @@ class SlideshowTests(unittest.TestCase):
             self.assertFalse(slideshow._current.isNull())
         finally:
             slideshow.stop()
+            widget.deleteLater()
+
+    def test_recursive_scanning_reaches_deep_folders_and_deduplicates_roots(self):
+        nested = self.folder_a / 'child' / 'grandchild'
+        nested.mkdir(parents=True)
+        nested_image = nested / 'nested.png'
+        image = QImage(1280, 720, QImage.Format.Format_RGB32)
+        image.fill(QColor('blue'))
+        self.assertTrue(image.save(str(nested_image)))
+        widget = QWidget()
+        try:
+            shallow = animations.make_animation('slideshow', widget, {'slideshow_folders': [str(self.folder_a)]})
+            shallow.reset()
+            self.assertEqual(len(shallow._images), 1)
+            deep = animations.make_animation('slideshow', widget, {
+                'slideshow_folders': [str(self.folder_a), str(nested)], 'slideshow_recursive': True})
+            deep.reset()
+            self.assertEqual(len(deep._images), 2)
+            self.assertIn(nested_image, deep._images)
+        finally:
+            widget.deleteLater()
+
+    def test_resolution_requires_both_dimensions_and_includes_exact_boundary(self):
+        for name, width, height in [('narrow', 1279, 1080), ('short', 1920, 719), ('tiny', 16, 16)]:
+            image = QImage(width, height, QImage.Format.Format_RGB32)
+            image.fill(QColor('blue'))
+            self.assertTrue(image.save(str(self.folder_a / (name + '.png'))))
+        widget = QWidget()
+        slideshow = animations.SlideshowAnimation(widget, str(self.folder_a))
+        try:
+            slideshow.reset()
+            self.assertEqual([path.name for path in slideshow._images], ['picture.png'])
+            (self.folder_a / 'picture.png').unlink()
+            slideshow.reset()
+            self.assertEqual(slideshow._images, [])
+            self.assertIsNone(slideshow._current)
+        finally:
+            widget.deleteLater()
+
+    def test_image_replaced_with_low_resolution_is_skipped_at_playback(self):
+        widget = QWidget()
+        slideshow = animations.SlideshowAnimation(widget, str(self.folder_a))
+        try:
+            slideshow.reset()
+            small = QImage(16, 16, QImage.Format.Format_RGB32)
+            small.fill(QColor('blue'))
+            self.assertTrue(small.save(str(self.folder_a / 'picture.png')))
+            self.assertIsNone(slideshow._load(0))
+        finally:
             widget.deleteLater()
 
     def test_one_second_interval_finishes_fade_before_the_next_slide(self):

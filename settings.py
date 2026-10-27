@@ -18,6 +18,7 @@ DEFAULTS: dict = {
     "slideshow_folder": "",
     "slideshow_folders": [],
     "slideshow_sync": True,
+    "slideshow_recursive": False,
     "slideshow_interval": 5,      # seconds per image
 }
 

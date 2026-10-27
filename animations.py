@@ -11,6 +11,7 @@ from PyQt6.QtGui import (
     QBrush,
     QColor,
     QFont,
+    QImageReader,
     QPainter,
     QPen,
     QPixmap,
@@ -447,11 +448,15 @@ SUPPORTED_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 class SlideshowAnimation(BaseAnimation):
     FPS = 30
     FADE_MS = 750  # Complete transitions even at the minimum one-second interval.
+    MIN_WIDTH = 1280
+    MIN_HEIGHT = 720
 
-    def __init__(self, widget, folders: list[str] | str, interval_sec: int = 5):
+    def __init__(self, widget, folders: list[str] | str, interval_sec: int = 5,
+                 recursive: bool = False):
         super().__init__(widget)
         folders = [folders] if isinstance(folders, str) else list(folders)
         self._folders = [folder for folder in folders if folder]
+        self._recursive = recursive
         self._interval_ms = max(1, interval_sec) * 1000
         self._images: list[Path] = []
         self._idx = 0
@@ -468,14 +473,27 @@ class SlideshowAnimation(BaseAnimation):
         self._images = []
         seen = set()
         for folder in self._folders:
-            try:
-                for image in Path(folder).iterdir():
-                    key = os.path.normcase(str(image.resolve()))
-                    if image.is_file() and image.suffix.lower() in SUPPORTED_EXT and key not in seen:
+            # Do not follow directory links/junctions into recursive loops.
+            for directory, subdirs, filenames in os.walk(folder, followlinks=False):
+                subdirs[:] = [name for name in subdirs
+                              if not os.path.isjunction(os.path.join(directory, name))]
+                for filename in filenames:
+                    image = Path(directory) / filename
+                    if image.suffix.lower() not in SUPPORTED_EXT:
+                        continue
+                    try:
+                        key = os.path.normcase(str(image.resolve()))
+                        if key in seen:
+                            continue
                         seen.add(key)
-                        self._images.append(image)
-            except OSError:
-                continue  # A missing/unreadable folder must not prevent locking.
+                        reader = QImageReader(str(image))
+                        size = reader.size()  # Inspect headers without decoding every full image.
+                        if reader.canRead() and size.width() >= self.MIN_WIDTH and size.height() >= self.MIN_HEIGHT:
+                            self._images.append(image)
+                    except OSError:
+                        continue  # Deleted or unreadable files must not prevent locking.
+                if not self._recursive:
+                    break
         random.shuffle(self._images)
         self._idx = 0
         self._current = self._load(0)
@@ -487,7 +505,7 @@ class SlideshowAnimation(BaseAnimation):
         for offset in range(len(self._images)):
             candidate = (idx + offset) % len(self._images)
             pixmap = QPixmap(str(self._images[candidate]))
-            if not pixmap.isNull():
+            if not pixmap.isNull() and pixmap.width() >= self.MIN_WIDTH and pixmap.height() >= self.MIN_HEIGHT:
                 self._idx = candidate
                 return pixmap
         return None
@@ -526,7 +544,7 @@ class SlideshowAnimation(BaseAnimation):
             font = QFont("Segoe UI", 16)
             painter.setFont(font)
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter,
-                             tr('No images found in the selected folders'))
+                             tr('No eligible images found (minimum 1280 × 720)'))
             return
 
         def blit(px: QPixmap, opacity: float):
@@ -564,5 +582,6 @@ def make_animation(name: str, widget, settings: dict) -> BaseAnimation | None:
             widget,
             get_slideshow_folders(settings),
             settings.get("slideshow_interval", 5),
+            recursive=settings.get('slideshow_recursive', False),
         )
     return None
