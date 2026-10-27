@@ -619,7 +619,7 @@ class BlindOverlay(QWidget):
         painter.drawText(
             QRect(0, int(rect.height() * 0.84), rect.width(), 30),
             Qt.AlignmentFlag.AlignCenter,
-            tr('Type your password to unlock'),
+            tr('Press any key or click to enter your password'),
         )
 
     # -- input ---------------------------------------------------------------
@@ -629,13 +629,7 @@ class BlindOverlay(QWidget):
             return
         if not self._state.showing_password:
             self._state.show_password_input()
-            # These keys dismiss the clock surface, rather than type a password.
-            if event.key() in (Qt.Key.Key_Space, Qt.Key.Key_Escape,
-                               Qt.Key.Key_Return, Qt.Key.Key_Enter):
-                return
-            text = event.text()
-            if text and text.isprintable():
-                self._state.handle_char(text)
+            # The first key only dismisses the clock surface, regardless of text.
             return
         key = event.key()
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):

@@ -295,18 +295,21 @@ class LockTests(unittest.TestCase):
         unlocked.assert_called_once()
         state.deleteLater()
 
-    def test_first_printable_key_opens_prompt_and_counts_toward_password(self):
+    def test_first_printable_key_only_opens_prompt(self):
         state = blind.BlindState({'password_hash': auth.hash_password('1024')})
         unlocked = Mock()
         state.unlocked.connect(unlocked)
         overlay = blind.BlindOverlay(QRect(0, 0, 800, 600), state, {'screensaver_type': 'none'})
         try:
+            overlay.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, ord('1'), Qt.KeyboardModifier.NoModifier, '1'))
+            self.assertTrue(state.showing_password)
+            self.assertEqual(state.password_buffer, '')
+            unlocked.assert_not_called()
             for char in '1024':
                 event = QKeyEvent(QEvent.Type.KeyPress, ord(char), Qt.KeyboardModifier.NoModifier, char)
                 overlay.keyPressEvent(event)
-                if char == '1':
-                    self.assertTrue(state.showing_password)
-                    self.assertEqual(state.password_buffer, '1')
+                if char != '4':
+                    unlocked.assert_not_called()
             unlocked.assert_called_once()
         finally:
             overlay.deleteLater()
@@ -314,7 +317,8 @@ class LockTests(unittest.TestCase):
 
     def test_wake_keys_open_empty_prompt_before_password_input(self):
         for key, text in ((Qt.Key.Key_Space, ' '), (Qt.Key.Key_Escape, '\x1b'),
-                          (Qt.Key.Key_Return, '\r'), (Qt.Key.Key_Enter, '\r')):
+                          (Qt.Key.Key_Return, '\r'), (Qt.Key.Key_Enter, '\r'),
+                          (Qt.Key.Key_A, 'a'), (Qt.Key.Key_1, '1'), (Qt.Key.Key_Exclam, '!')):
             with self.subTest(key=key):
                 state = blind.BlindState({'password_hash': auth.hash_password('1024')})
                 unlocked = Mock()
@@ -332,6 +336,22 @@ class LockTests(unittest.TestCase):
                 finally:
                     overlay.deleteLater()
                     state.deleteLater()
+
+    def test_mouse_wake_keeps_the_first_password_character(self):
+        state = blind.BlindState({'password_hash': auth.hash_password('1024')})
+        unlocked = Mock()
+        state.unlocked.connect(unlocked)
+        overlay = blind.BlindOverlay(QRect(0, 0, 800, 600), state, {'screensaver_type': 'none'})
+        try:
+            overlay.mousePressEvent(None)
+            for char in '1024':
+                overlay.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, ord(char), Qt.KeyboardModifier.NoModifier, char))
+                if char == '1':
+                    self.assertEqual(state.password_buffer, '1')
+            unlocked.assert_called_once()
+        finally:
+            overlay.deleteLater()
+            state.deleteLater()
 
     def test_space_after_prompt_opens_is_a_valid_password_character(self):
         state = blind.BlindState({'password_hash': auth.hash_password(' 1024')})

@@ -127,7 +127,7 @@ ZH_CN = {
     'dddd, MMMM d': 'yyyy年M月d日 dddd',
     'Enter password': '输入密码',
     'Correct password unlocks    Esc  Cancel': '密码正确即解锁    Esc  取消',
-    'Type your password to unlock': '按任意键输入密码解锁',
+    'Press any key or click to enter your password': '按任意键或点击以输入密码',
     'No images found in the selected folder': '所选文件夹中没有找到图片',
     'Use a single key combination.': '快捷键只能包含一组按键。',
     'Include Ctrl or Alt. The Windows key is not supported.': '请使用 Ctrl 或 Alt 作为组合键；不支持 Windows 键。',

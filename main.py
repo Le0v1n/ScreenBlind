@@ -481,7 +481,7 @@ class ScreensaverTab(QWidget):
 # About tab
 # ---------------------------------------------------------------------------
 
-APP_VERSION = "1.5.1"
+APP_VERSION = "1.5.2"
 CONTRIBUTOR_NAME = "Lyle"
 CONTRIBUTOR_EMAIL = "zjkljd@163.com"
 WEBSITE_URL = "https://screenblind.cc"
