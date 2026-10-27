@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from contextlib import ExitStack
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from PyQt6.QtCore import QEvent, QRect
@@ -12,6 +12,7 @@ from PyQt6.QtGui import QColor, QImage
 from PyQt6.QtWidgets import QApplication, QWidget
 
 import animations
+import auth
 import blind
 import displays
 import main
@@ -99,6 +100,39 @@ class SettingsTests(TemporarySettings):
 
 
 class ImmediateTests(unittest.TestCase):
+    def test_slideshow_remains_visible_during_password_correction_and_unlock(self):
+        for timeout in (0, 120):
+            with self.subTest(timeout=timeout):
+                state = blind.BlindState({'screensaver_type': 'slideshow', 'idle_timeout': timeout,
+                                          'password_hash': auth.hash_password('1024')})
+                unlocked = Mock()
+                state.unlocked.connect(unlocked)
+                try:
+                    state._on_idle()
+                    state.show_password_input()
+                    state.handle_char('x')
+                    state.attempt_unlock()
+                    self.assertTrue(state.wrong)
+                    self.assertTrue(state.in_screensaver)
+                    self.assertTrue(state.showing_password)
+                    self.assertFalse(state.cursor_hidden)
+                    unlocked.assert_not_called()
+                    for char in '1024':
+                        state.handle_char(char)
+                    unlocked.assert_called_once()
+                finally:
+                    state.deleteLater()
+
+    def test_opening_prompt_before_slideshow_timeout_does_not_start_it_early(self):
+        state = blind.BlindState({'screensaver_type': 'slideshow', 'idle_timeout': 120})
+        try:
+            state.start_idle_timer()
+            state.show_password_input()
+            self.assertFalse(state.in_screensaver)
+            self.assertTrue(state._idle_timer.isActive())
+        finally:
+            state.deleteLater()
+
     def test_zero_starts_immediately_but_does_not_interrupt_password_entry(self):
         state = blind.BlindState({'idle_timeout': 0})
         try:
@@ -299,6 +333,25 @@ class SlideshowTests(unittest.TestCase):
                     left._animation._start_transition()
                     left._animation.advance()
                     self.assertLess(left._animation._alpha, right._animation._alpha)
+                # Opening/typing/cancelling must preserve both the image and playback.
+                images = [overlay._animation._current for overlay in (left, right)]
+                background = left.grab().toImage().pixelColor(20, 400)
+                with patch.object(left._animation, 'reset') as reset, \
+                     patch.object(left._animation, 'stop') as stop:
+                    manager._state.show_password_input()
+                    manager._state.handle_char('x')
+                    self.assertTrue(manager._state.showing_password)
+                    self.assertTrue(manager._state.in_screensaver)
+                    self.assertEqual(left.grab().toImage().pixelColor(20, 400), background)
+                    self.assertTrue(left._ss_active and right._ss_active)
+                    self.assertTrue(left._animation._slide_timer.isActive())
+                    self.assertTrue(right._animation._slide_timer.isActive())
+                    for overlay, image in zip((left, right), images):
+                        self.assertIs(overlay._animation._current, image)
+                    manager._state.hide_password_input()
+                    self.assertTrue(manager._state.in_screensaver)
+                    reset.assert_not_called()
+                    stop.assert_not_called()
             finally:
                 for overlay in manager._overlays:
                     overlay.leave_screensaver()

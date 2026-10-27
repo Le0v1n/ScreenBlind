@@ -608,7 +608,7 @@ class ScreensaverTab(QScrollArea):
 # About tab
 # ---------------------------------------------------------------------------
 
-APP_VERSION = "1.6.2"
+APP_VERSION = "1.6.3"
 CONTRIBUTOR_NAME = "Lyle"
 CONTRIBUTOR_EMAIL = "zjkljd@163.com"
 WEBSITE_URL = "https://screenblind.cc"

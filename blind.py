@@ -274,7 +274,9 @@ class BlindState(QObject):
             self.shake_offset = 0
             self.cursor_visible = True
             self.cursor_hidden = False   # always show cursor with the prompt
-            self.in_screensaver = False  # stop screensaver when prompt appears
+            # Keep an active slideshow and its transition timeline behind the prompt.
+            if self._cfg.get('screensaver_type') != 'slideshow':
+                self.in_screensaver = False
             self._cursor_timer.start()
             self.updated.emit()
             self.start_idle_timer()
@@ -540,7 +542,7 @@ class BlindOverlay(QWidget):
         py = int(rect.height() * 0.60)
 
         # Panel background
-        painter.setBrush(QColor(0, 0, 0, 170))
+        painter.setBrush(QColor(0, 0, 0, 190))
         border_color = (
             QColor(220, 80, 80, 200) if self._state.wrong
             else QColor(80, 100, 160, 180)
