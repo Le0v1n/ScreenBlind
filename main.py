@@ -10,7 +10,7 @@ from i18n import tr
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QTimer, QUrl
+from PyQt6.QtCore import Qt, QTimer, QUrl, QRectF
 from PyQt6.QtGui import (
     QColor,
     QDesktopServices,
@@ -57,6 +57,7 @@ from themes import apply_theme
 from instance import InstanceGuard
 from i18n import configure_language
 from displays import display_name, screen_key
+from clocks import CLOCK_STYLES, draw_clock
 
 
 # ---------------------------------------------------------------------------
@@ -419,6 +420,27 @@ class SecurityTab(QWidget):
 # Screensaver tab
 # ---------------------------------------------------------------------------
 
+class ClockPreview(QWidget):
+    def __init__(self, cfg):
+        super().__init__()
+        self._cfg = cfg
+        self.setMinimumHeight(180)
+        self.setMaximumHeight(220)
+        self._timer = QTimer(self)
+        self._timer.setInterval(1000)
+        self._timer.timeout.connect(self.update)
+        self._timer.start()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor('#121a2b'))
+        painter.drawRoundedRect(self.rect(), 14, 14)
+        draw_clock(painter, QRectF(self.rect().adjusted(12, 8, -12, -8)),
+                   self._cfg.get('clock_style', 'classic'))
+
+
 class ScreensaverTab(QScrollArea):
     def __init__(self, cfg: dict):
         super().__init__()
@@ -431,6 +453,23 @@ class ScreensaverTab(QScrollArea):
         layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         layout.setSpacing(12)
         layout.setContentsMargins(16, 16, 16, 16)
+
+        layout.addWidget(_label(tr('Lock-screen clock:')))
+        self._clock_moving = QCheckBox(tr('Move the clock periodically'))
+        self._clock_moving.setChecked(cfg.get('clock_moving', False))
+        self._clock_moving.toggled.connect(self._save_clock_moving)
+        layout.addWidget(self._clock_moving)
+        layout.addWidget(_label(tr('Off by default. When enabled, the clock moves every 30–120 seconds.'), secondary=True))
+        self._clock_style = QComboBox()
+        for name, key in zip((tr('Classic · time and seconds'), tr('Minimal · clean typography'), tr('Panel · soft indigo')), CLOCK_STYLES):
+            self._clock_style.addItem(name, key)
+        index = self._clock_style.findData(cfg.get('clock_style', 'classic'))
+        self._clock_style.setCurrentIndex(max(0, index))
+        self._clock_style.currentIndexChanged.connect(self._save_clock_style)
+        layout.addWidget(self._clock_style)
+        self._clock_preview = ClockPreview(cfg)
+        layout.addWidget(self._clock_preview)
+        layout.addWidget(_sep())
 
         # Idle timeout
         self._idle_enabled = QCheckBox(tr('Start the screensaver when idle'))
@@ -514,6 +553,15 @@ class ScreensaverTab(QScrollArea):
         self._timeout_spin.setEnabled(enabled)
         cfg_mod.save(self._cfg)
 
+    def _save_clock_moving(self, enabled):
+        self._cfg['clock_moving'] = enabled
+        cfg_mod.save(self._cfg)
+
+    def _save_clock_style(self, index):
+        self._cfg['clock_style'] = self._clock_style.itemData(index)
+        cfg_mod.save(self._cfg)
+        self._clock_preview.update()
+
     def _save_timeout(self, val: int):
         self._cfg["idle_timeout"] = val
         cfg_mod.save(self._cfg)
@@ -560,7 +608,7 @@ class ScreensaverTab(QScrollArea):
 # About tab
 # ---------------------------------------------------------------------------
 
-APP_VERSION = "1.6.1"
+APP_VERSION = "1.6.2"
 CONTRIBUTOR_NAME = "Lyle"
 CONTRIBUTOR_EMAIL = "zjkljd@163.com"
 WEBSITE_URL = "https://screenblind.cc"

@@ -12,8 +12,6 @@ import ctypes.wintypes
 import random
 
 from PyQt6.QtCore import (
-    QDateTime,
-    QLocale,
     QObject,
     QRect,
     Qt,
@@ -24,7 +22,6 @@ from PyQt6.QtGui import (
     QBrush,
     QColor,
     QFont,
-    QFontMetrics,
     QLinearGradient,
     QPainter,
     QPen,
@@ -34,6 +31,7 @@ from PyQt6.QtWidgets import QApplication, QWidget
 import animations as anim_module
 import dpi
 from displays import display_name
+from clocks import clock_bounds, draw_clock
 from auth import verify_password
 
 
@@ -199,14 +197,15 @@ class BlindState(QObject):
         self.cursor_hidden = False   # True when screensaver is active
 
         # Clock position as screen fraction: x in [0,1], y in [0,1]
-        # Starts centred; jumps to a random safe zone every 30-120 seconds.
+        # Fixed by default; optional movement every 30-120 seconds.
         self.clock_rel_x = 0.50
         self.clock_rel_y = 0.38
 
         self._drift_timer = QTimer(self)
         self._drift_timer.setSingleShot(True)
         self._drift_timer.timeout.connect(self._pick_drift_target)
-        self._drift_timer.start(random.randint(30, 120) * 1000)
+        if self._cfg.get('clock_moving', False):
+            self._drift_timer.start(random.randint(30, 120) * 1000)
 
         # Background hue (0-360). Fades smoothly to a new random hue periodically.
         self.bg_hue = 240.0          # start: deep indigo
@@ -295,6 +294,9 @@ class BlindState(QObject):
         self.updated.emit()
 
     def _pick_drift_target(self):
+        if not self._cfg.get('clock_moving', False):
+            self._drift_timer.stop()
+            return
         # x: 20-80% of width keeps the wide time text safely on screen
         # y: 15-58% of height stays well above the password prompt at 60%
         self.clock_rel_x = random.uniform(0.20, 0.80)
@@ -528,49 +530,8 @@ class BlindOverlay(QWidget):
             self._draw_hint(painter, rect)
 
     def _draw_clock(self, painter: QPainter, rect: QRect):
-        now = QDateTime.currentDateTime()
-        # Convert screen-relative position to pixel coords.
-        # drift_x offsets the AlignHCenter rect so the visual centre lands on cx.
-        cx = int(self._state.clock_rel_x * rect.width())
-        y_base = int(self._state.clock_rel_y * rect.height())
-        drift_x = cx - rect.width() // 2
-
-        # Large time
-        time_str = now.toString("HH:mm")
-        font_time = QFont("Segoe UI", 82)
-        font_time.setWeight(QFont.Weight.Light)
-        painter.setFont(font_time)
-        fm = QFontMetrics(font_time)
-        th = fm.height()
-        painter.setPen(QColor(255, 255, 255, 235))
-        painter.drawText(
-            QRect(drift_x, y_base - th // 2, rect.width(), th + 4),
-            Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
-            time_str,
-        )
-
-        # Seconds (smaller, to the right)
-        sec_str = now.toString("ss")
-        font_sec = QFont("Segoe UI", 28)
-        font_sec.setWeight(QFont.Weight.Light)
-        painter.setFont(font_sec)
-        fm_time = QFontMetrics(font_time)
-        time_w = fm_time.horizontalAdvance(time_str)
-        sec_x = cx + time_w // 2 + 8
-        painter.setPen(QColor(180, 180, 230, 180))
-        painter.drawText(sec_x, y_base + 10, sec_str)
-
-        # Date
-        date_str = QLocale().toString(now, tr('dddd, MMMM d'))
-        font_date = QFont("Microsoft YaHei UI", 18)
-        font_date.setWeight(QFont.Weight.Light)
-        painter.setFont(font_date)
-        painter.setPen(QColor(190, 190, 240, 190))
-        painter.drawText(
-            QRect(drift_x, y_base + th // 2 + 8, rect.width(), 36),
-            Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
-            date_str,
-        )
+        bounds = clock_bounds(rect, self._state.clock_rel_x, self._state.clock_rel_y)
+        draw_clock(painter, bounds, self._cfg.get('clock_style', 'classic'))
 
     def _draw_password_prompt(self, painter: QPainter, rect: QRect):
         ox = self._state.shake_offset

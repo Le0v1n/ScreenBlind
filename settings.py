@@ -11,6 +11,8 @@ DEFAULTS: dict = {
     "password_hash": "",
     "locked_screens": [],
     "screen_names": {},          # Windows display identifier -> custom label
+    "clock_moving": False,
+    "clock_style": "classic",
     "idle_timeout": 120,          # seconds before screensaver starts
     "screensaver_enabled": True,
     # "bubbles" | "matrix" | "flurry" | "slideshow" | "none"
