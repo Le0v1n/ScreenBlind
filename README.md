@@ -49,6 +49,8 @@ Enhancements contributed by **Lyle** · [zjkljd@163.com](mailto:zjkljd@163.com).
 - **Optional idle screensaver** — the timeout accepts 0 seconds for immediate playback after locking. Uncheck Start the screensaver when idle to disable the animation timer while keeping the timeout. An active image slideshow continues behind the password panel without resetting its image or transition; other animations hide during password entry and resume immediately on cancel when the timeout is zero. This does not automatically lock an unlocked desktop.
 - **Multi-display slideshow** — selected displays show the same picture and synchronized transitions by default. Uncheck Show the same image on all locked displays for independent playback.
 - **Multiple picture folders** — use Add folder repeatedly, then Remove selected folders to manage the combined playlist. Legacy single-folder settings migrate automatically; unavailable folders and invalid images are skipped.
+- **Password background blur** — opening the password prompt blurs the background while keeping the clock and input sharp. Slideshows keep playing; cancelling with Esc restores the sharp background.
+- **Wheel-safe settings** — closed dropdowns and numeric inputs ignore wheel changes, letting the page scroll. Open dropdown lists still scroll normally, and explicit selection, keyboard navigation and numeric editing remain available.
 - **Clock appearance and movement** — choose Classic, Minimal or Panel in the Screensaver tab with a live preview. Movement is off by default; enabling it repositions the clock every 30–120 seconds, clamped within the display above the password panel. Preferences are saved automatically.
 
   [Preview the three clock styles](docs/screenshots/clock-styles.png)

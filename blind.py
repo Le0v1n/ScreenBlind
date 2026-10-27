@@ -14,6 +14,7 @@ import random
 from PyQt6.QtCore import (
     QObject,
     QRect,
+    QRectF,
     Qt,
     QTimer,
     pyqtSignal,
@@ -25,8 +26,9 @@ from PyQt6.QtGui import (
     QLinearGradient,
     QPainter,
     QPen,
+    QPixmap,
 )
-from PyQt6.QtWidgets import QApplication, QWidget
+from PyQt6.QtWidgets import QApplication, QWidget, QGraphicsScene, QGraphicsBlurEffect
 
 import animations as anim_module
 import dpi
@@ -407,6 +409,8 @@ class BlindOverlay(QWidget):
         self._animation: anim_module.BaseAnimation | None = None
         self._ss_active = False
         self._allow_close = False   # only the unlock flow may close us
+        self._blur_key = None
+        self._blur_pixmap = None
 
         self._setup_window()
         self._setup_animation(slideshow)
@@ -497,6 +501,26 @@ class BlindOverlay(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = self.rect()
 
+        if self._state.showing_password:
+            self._draw_blurred_background(painter, rect)
+        else:
+            self._draw_background(painter, rect)
+
+        # Clock and input stay sharp above the blurred background.
+        self._draw_clock(painter, rect)
+        if self._screen_name:
+            painter.setFont(QFont('Microsoft YaHei UI', 12))
+            painter.setPen(QColor(235, 235, 255, 210))
+            name = painter.fontMetrics().elidedText(self._screen_name, Qt.TextElideMode.ElideRight, max(0, rect.width() - 48))
+            painter.drawText(rect.adjusted(24, 20, -24, -20),
+                             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, name)
+
+        if self._state.showing_password:
+            self._draw_password_prompt(painter, rect)
+        elif not self._state.in_screensaver:
+            self._draw_hint(painter, rect)
+
+    def _draw_background(self, painter, rect):
         # Background gradient — hue rotates slowly between random dark tones
         h = self._state.bg_hue / 360.0
         top_c = QColor.fromHslF(h, 0.45, 0.06)
@@ -516,20 +540,39 @@ class BlindOverlay(QWidget):
             if dim:
                 painter.fillRect(rect, QColor(0, 0, 0, dim))
 
-        # Clock (always visible)
-        self._draw_clock(painter, rect)
-        if self._screen_name:
-            painter.setFont(QFont('Microsoft YaHei UI', 12))
-            painter.setPen(QColor(235, 235, 255, 210))
-            name = painter.fontMetrics().elidedText(self._screen_name, Qt.TextElideMode.ElideRight, max(0, rect.width() - 48))
-            painter.drawText(rect.adjusted(24, 20, -24, -20),
-                             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, name)
-
-        # Password prompt or hint
-        if self._state.showing_password:
-            self._draw_password_prompt(painter, rect)
-        elif not self._state.in_screensaver:
-            self._draw_hint(painter, rect)
+    def _draw_blurred_background(self, painter, rect):
+        animation = self._animation if self._state.in_screensaver else None
+        if isinstance(animation, anim_module.SlideshowAnimation):
+            key = (rect.size(),
+                   animation._current.cacheKey() if animation._current else None,
+                   animation._next.cacheKey() if animation._next else None, animation._alpha)
+        else:
+            key = (rect.size(), self._state.bg_hue)
+        if key != self._blur_key:
+            # Blur a bounded working image, preserving live slideshow transitions.
+            scale = min(1.0, 480 / max(1, rect.width(), rect.height()))
+            source = QPixmap(max(1, round(rect.width() * scale)), max(1, round(rect.height() * scale)))
+            source.fill(Qt.GlobalColor.black)
+            background = QPainter(source)
+            background.scale(source.width() / max(1, rect.width()), source.height() / max(1, rect.height()))
+            self._draw_background(background, rect)
+            background.end()
+            scene = QGraphicsScene()
+            item = scene.addPixmap(source)
+            effect = QGraphicsBlurEffect()
+            effect.setBlurRadius(18)
+            effect.setBlurHints(QGraphicsBlurEffect.BlurHint.QualityHint)
+            item.setGraphicsEffect(effect)
+            blurred = QPixmap(source.size())
+            blurred.fill(Qt.GlobalColor.black)
+            output = QPainter(blurred)
+            area = QRectF(source.rect())
+            scene.render(output, area, area)
+            output.end()
+            self._blur_pixmap = blurred
+            self._blur_key = key
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        painter.drawPixmap(rect, self._blur_pixmap)
 
     def _draw_clock(self, painter: QPainter, rect: QRect):
         bounds = clock_bounds(rect, self._state.clock_rel_x, self._state.clock_rel_y)

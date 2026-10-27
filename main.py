@@ -24,7 +24,6 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
-    QComboBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -39,7 +38,6 @@ from PyQt6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
-    QSpinBox,
     QScrollArea,
     QSystemTrayIcon,
     QTabWidget,
@@ -58,6 +56,7 @@ from instance import InstanceGuard
 from i18n import configure_language
 from displays import display_name, screen_key
 from clocks import CLOCK_STYLES, draw_clock
+from widgets import WheelSafeComboBox, WheelSafeSpinBox
 
 
 # ---------------------------------------------------------------------------
@@ -460,7 +459,7 @@ class ScreensaverTab(QScrollArea):
         self._clock_moving.toggled.connect(self._save_clock_moving)
         layout.addWidget(self._clock_moving)
         layout.addWidget(_label(tr('Off by default. When enabled, the clock moves every 30–120 seconds.'), secondary=True))
-        self._clock_style = QComboBox()
+        self._clock_style = WheelSafeComboBox()
         for name, key in zip((tr('Classic · time and seconds'), tr('Minimal · clean typography'), tr('Panel · soft indigo')), CLOCK_STYLES):
             self._clock_style.addItem(name, key)
         index = self._clock_style.findData(cfg.get('clock_style', 'classic'))
@@ -477,7 +476,7 @@ class ScreensaverTab(QScrollArea):
         layout.addWidget(self._idle_enabled)
         layout.addWidget(_label(tr('Start screensaver after idle:')))
         row1 = QHBoxLayout()
-        self._timeout_spin = QSpinBox()
+        self._timeout_spin = WheelSafeSpinBox()
         self._timeout_spin.setRange(0, 3600)
         self._timeout_spin.setValue(cfg.get("idle_timeout", 120))
         self._timeout_spin.setSuffix(tr('  seconds'))
@@ -494,7 +493,7 @@ class ScreensaverTab(QScrollArea):
 
         # Animation type
         layout.addWidget(_label(tr('Animation style:')))
-        self._anim_combo = QComboBox()
+        self._anim_combo = WheelSafeComboBox()
         self._anim_combo.addItems([tr('Bubbles'), tr('Matrix'), tr('Flurry'), tr('Image slideshow'), tr('None')])
         type_map = {"bubbles": 0, "matrix": 1, "flurry": 2, "slideshow": 3, "none": 4}
         self._anim_combo.setCurrentIndex(type_map.get(cfg.get("screensaver_type", "bubbles"), 0))
@@ -535,7 +534,7 @@ class ScreensaverTab(QScrollArea):
 
         layout.addWidget(_label(tr('Seconds per image:')))
         row3 = QHBoxLayout()
-        self._interval_spin = QSpinBox()
+        self._interval_spin = WheelSafeSpinBox()
         self._interval_spin.setRange(1, 300)
         self._interval_spin.setValue(cfg.get("slideshow_interval", 5))
         self._interval_spin.setSuffix(tr('  seconds'))
@@ -608,7 +607,7 @@ class ScreensaverTab(QScrollArea):
 # About tab
 # ---------------------------------------------------------------------------
 
-APP_VERSION = "1.6.3"
+APP_VERSION = "1.6.4"
 CONTRIBUTOR_NAME = "Lyle"
 CONTRIBUTOR_EMAIL = "zjkljd@163.com"
 WEBSITE_URL = "https://screenblind.cc"
@@ -914,7 +913,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(12)
         layout.addWidget(_label(tr('Language')))
-        self._language_combo = QComboBox()
+        self._language_combo = WheelSafeComboBox()
         self._language_combo.addItem(tr('System default'), 'system')
         self._language_combo.addItem('English', 'en')
         self._language_combo.addItem('简体中文', 'zh_CN')
@@ -935,7 +934,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._startup_status)
         layout.addWidget(_sep())
         layout.addWidget(_label(tr('Theme')))
-        self._theme_combo = QComboBox()
+        self._theme_combo = WheelSafeComboBox()
         self._theme_combo.addItem(tr('Dark'), "dark")
         self._theme_combo.addItem(tr('Light'), "light")
         self._theme_combo.setCurrentIndex(1 if self._cfg.get("theme") == "light" else 0)
