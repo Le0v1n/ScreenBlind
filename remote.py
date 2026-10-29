@@ -17,6 +17,7 @@ import dpi
 from blind import _force_topmost
 from displays import screen_key
 from mouse_hook import LocalMouseBlocker
+from keyboard_guard import LocalKeyboardBlocker
 
 
 def foreground_monitor() -> tuple[int, int]:
@@ -122,6 +123,7 @@ class RemoteManager(QObject):
     failed = pyqtSignal(str)
     fallbackRequested = pyqtSignal()
     recoveryRequested = pyqtSignal()
+    _localRecoveryRequested = pyqtSignal()
 
     def __init__(self, cfg: dict, parent=None):
         super().__init__(parent)
@@ -130,6 +132,10 @@ class RemoteManager(QObject):
         self._ready = False
         self._recovery_window = None
         self._mouse_blocker = LocalMouseBlocker()
+        self._localRecoveryRequested.connect(self.recoveryRequested.emit, Qt.ConnectionType.QueuedConnection)
+        self._keyboard_blocker = LocalKeyboardBlocker(
+            [cfg.get('lock_hotkey', ''), cfg.get('remote_recovery_hotkey', '')],
+            self._localRecoveryRequested.emit, self._recovery_has_foreground)
         self._overlays: list[PrivacyOverlay] = []
         self._topmost_timer = QTimer(self)
         self._topmost_timer.setInterval(500)
@@ -159,7 +165,18 @@ class RemoteManager(QObject):
             except (OSError, RuntimeError):
                 self._ready = False
                 self.failed.emit('Local mouse filtering could not be enabled. Privacy covers remain active.')
+        if self._ready and self._active and self._cfg.get('remote_block_local_keyboard', False):
+            try:
+                self._keyboard_blocker.start()
+            except (OSError, RuntimeError, ValueError):
+                self._ready = False
+                self.failed.emit('Local keyboard filtering could not be enabled. Privacy covers remain active.')
         return self._ready
+
+    def _recovery_has_foreground(self):
+        window = self._recovery_window
+        return bool(window is not None and window.isVisible()
+                    and foreground_monitor()[0] == int(window.winId()))
 
     def _replace_covers(self, screens) -> bool:
         allowed = set(self._cfg.get('remote_allowed_screen_ids', []))
@@ -245,6 +262,10 @@ class RemoteManager(QObject):
             overlay.deleteLater()
 
     def stop(self):
+        try:
+            self._keyboard_blocker.stop()
+        except OSError:
+            pass  # Filtering is already disabled even if Windows refuses unhook.
         try:
             self._mouse_blocker.stop()
         except OSError:

@@ -10,6 +10,7 @@ DEFAULTS: dict = {
     "settings_hotkey": "",
     "remote_recovery_hotkey": "",
     "remote_block_local_mouse": False,
+    "remote_block_local_keyboard": False,
     "password_hash": "",
     "locked_screens": [],
     "lock_all_screens": False,

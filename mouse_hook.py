@@ -17,6 +17,7 @@ _retained_hooks = []
 
 
 class MouseHook:
+    hook_id = 14
     def __init__(self):
         self._handle = None
         self._callback = None
@@ -52,7 +53,7 @@ class MouseHook:
         api.UnhookWindowsHookEx.restype = ctypes.c_int
         self._api = api
         self._callback = callback_type(self._dispatch)
-        self._handle = api.SetWindowsHookExW(14, self._callback, None, 0)
+        self._handle = api.SetWindowsHookExW(self.hook_id, self._callback, None, 0)
         if not self._handle:
             self._callback = None
             raise ctypes.WinError(ctypes.get_last_error())

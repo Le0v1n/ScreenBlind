@@ -33,6 +33,13 @@ class RemoteTab(QWidget):
         mouse_note = QLabel(tr('Off by default. Blocks unmarked mouse movement, clicks and scrolling; allows injected input. Source flags were tested with this UU setup; filtering still needs a live test. Local keyboard recovery stays available; configure a recovery hotkey before testing. This is not a system security boundary.'))
         mouse_note.setWordWrap(True)
         layout.addWidget(mouse_note)
+        self.block_local_keyboard = QCheckBox(tr('Block local keyboard during remote mode (experimental)'))
+        self.block_local_keyboard.setChecked(bool(cfg.get('remote_block_local_keyboard', False)))
+        self.block_local_keyboard.toggled.connect(self._save_keyboard_filter)
+        layout.addWidget(self.block_local_keyboard)
+        keyboard_note = QLabel(tr('Only your configured lock/restore hotkeys can open password recovery. Local typing is allowed only while the recovery box has focus; Ctrl/Alt/Win shortcuts remain blocked. Cancel to resume blocking. Injected remote input stays enabled. Ctrl+Alt+Delete cannot be blocked.'))
+        keyboard_note.setWordWrap(True)
+        layout.addWidget(keyboard_note)
         self.status = QLabel()
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
@@ -71,6 +78,7 @@ class RemoteTab(QWidget):
         self._active = active
         self.screen_list.setEnabled(not active)
         self.block_local_mouse.setEnabled(not active)
+        self.block_local_keyboard.setEnabled(not active)
         self.button.setText(tr('Exit remote mode (password required)') if active else tr('Enter remote mode'))
         self.status.setText(tr('Remote mode active · local screens covered') if active else tr('Remote mode is off. It does not start automatically.'))
 
@@ -81,6 +89,15 @@ class RemoteTab(QWidget):
             self.block_local_mouse.blockSignals(False)
             return
         self._cfg['remote_block_local_mouse'] = checked
+        settings.save(self._cfg)
+
+    def _save_keyboard_filter(self, checked):
+        if self._active:
+            self.block_local_keyboard.blockSignals(True)
+            self.block_local_keyboard.setChecked(bool(self._cfg.get('remote_block_local_keyboard', False)))
+            self.block_local_keyboard.blockSignals(False)
+            return
+        self._cfg['remote_block_local_keyboard'] = checked
         settings.save(self._cfg)
 
 

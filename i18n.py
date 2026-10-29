@@ -35,6 +35,8 @@ def tr(source, **values):
 
 
 ZH_CN = {
+    'Block local keyboard during remote mode (experimental)': '远程模式下屏蔽本地键盘（实验性）',
+    'Only your configured lock/restore hotkeys can open password recovery. Local typing is allowed only while the recovery box has focus; Ctrl/Alt/Win shortcuts remain blocked. Cancel to resume blocking. Injected remote input stays enabled. Ctrl+Alt+Delete cannot be blocked.': '仅保留已配置的锁定/恢复快捷键，用于唤出密码框。密码框获得焦点后允许本地输入，Ctrl/Alt/Win 组合仍被屏蔽；取消后继续屏蔽。远程注入输入保持可用。无法屏蔽系统 Ctrl+Alt+Delete。',
     'The lock hotkey opens password recovery in remote mode. Lock and restore may share a hotkey; the tray Lock now action still locks all displays.': '锁定快捷键在远程模式下会唤出密码恢复框。锁定与恢复可设置为同一快捷键；托盘“立即锁定”仍会锁定全部屏幕。',
     'Block local mouse during remote mode (experimental)': '远程模式下屏蔽本地鼠标（实验性）',
     'Off by default. Blocks unmarked mouse movement, clicks and scrolling; allows injected input. Source flags were tested with this UU setup; filtering still needs a live test. Local keyboard recovery stays available; configure a recovery hotkey before testing. This is not a system security boundary.': '默认关闭。拦截未标记为注入的鼠标移动、点击和滚轮，保留注入输入。当前 UU 的来源标记已实测，屏蔽效果仍需复测。本地键盘可用于密码恢复，测试前请配置恢复快捷键。此功能不提供系统级安全隔离。',

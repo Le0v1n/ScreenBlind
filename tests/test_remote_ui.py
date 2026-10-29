@@ -19,14 +19,20 @@ class RemoteUITests(unittest.TestCase):
             tab = RemoteTab(cfg)
             try:
                 self.assertFalse(tab.block_local_mouse.isChecked())
+                self.assertFalse(tab.block_local_keyboard.isChecked())
                 tab.block_local_mouse.setChecked(True)
                 self.assertTrue(cfg['remote_block_local_mouse'])
                 import settings
                 self.assertTrue(settings.load()['remote_block_local_mouse'])
+                tab.block_local_keyboard.setChecked(True)
+                self.assertTrue(settings.load()['remote_block_local_keyboard'])
                 tab.set_active(True)
                 tab.block_local_mouse.setChecked(False)
                 self.assertTrue(cfg['remote_block_local_mouse'])
                 self.assertTrue(tab.block_local_mouse.isChecked())
+                tab.block_local_keyboard.setChecked(False)
+                self.assertTrue(cfg['remote_block_local_keyboard'])
+                self.assertTrue(tab.block_local_keyboard.isChecked())
             finally:
                 tab.deleteLater()
 
@@ -59,8 +65,10 @@ class RemoteUITests(unittest.TestCase):
                 tab.set_active(True)
                 self.assertFalse(tab.screen_list.isEnabled())
                 self.assertFalse(tab.block_local_mouse.isEnabled())
+                self.assertFalse(tab.block_local_keyboard.isEnabled())
                 tab.set_active(False)
                 self.assertTrue(tab.screen_list.isEnabled())
                 self.assertTrue(tab.block_local_mouse.isEnabled())
+                self.assertTrue(tab.block_local_keyboard.isEnabled())
             finally:
                 tab.deleteLater()
