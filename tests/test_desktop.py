@@ -69,6 +69,27 @@ class HotkeyTests(unittest.TestCase):
             self.manager.configure({'lock': 'Ctrl+Alt+L', 'settings': 'Alt+Ctrl+L'})
         self.native.RegisterHotKey.assert_not_called()
 
+    def test_lock_and_recovery_share_one_registration_and_one_callback(self):
+        self.manager._callbacks['recovery'] = Mock()
+        for shortcuts in ({'lock': 'Ctrl+Alt+L', 'recovery': 'Alt+Ctrl+L'},
+                          {'recovery': 'Alt+Ctrl+L', 'lock': 'Ctrl+Alt+L'}):
+            self.manager.configure(shortcuts)
+            self.assertEqual(list(self.manager._actions.values()), ['lock'])
+        self.native.RegisterHotKey.assert_called_once()
+        msg = ctypes.wintypes.MSG()
+        msg.message = 0x0312
+        msg.wParam = next(iter(self.manager._actions))
+        self.manager.nativeEventFilter(b'windows_dispatcher_MSG', ctypes.addressof(msg))
+        APP.processEvents()
+        self.manager._callbacks['lock'].assert_called_once()
+        self.manager._callbacks['recovery'].assert_not_called()
+
+    def test_settings_cannot_share_combined_lock_recovery(self):
+        with self.assertRaises(ValueError):
+            self.manager.configure({'lock': 'Ctrl+Alt+L', 'recovery': 'Ctrl+Alt+L',
+                                    'settings': 'Ctrl+Alt+L'})
+        self.native.RegisterHotKey.assert_not_called()
+
     def test_native_message_defers_action_to_event_loop(self):
         self.manager.configure({'lock': 'Ctrl+Alt+L'})
         msg = ctypes.wintypes.MSG()

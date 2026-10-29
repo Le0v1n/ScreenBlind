@@ -35,6 +35,7 @@ def tr(source, **values):
 
 
 ZH_CN = {
+    'The lock hotkey opens password recovery in remote mode. Lock and restore may share a hotkey; the tray Lock now action still locks all displays.': '锁定快捷键在远程模式下会唤出密码恢复框。锁定与恢复可设置为同一快捷键；托盘“立即锁定”仍会锁定全部屏幕。',
     'Block local mouse during remote mode (experimental)': '远程模式下屏蔽本地鼠标（实验性）',
     'Off by default. Blocks unmarked mouse movement, clicks and scrolling; allows injected input. Source flags were tested with this UU setup; filtering still needs a live test. Local keyboard recovery stays available; configure a recovery hotkey before testing. This is not a system security boundary.': '默认关闭。拦截未标记为注入的鼠标移动、点击和滚轮，保留注入输入。当前 UU 的来源标记已实测，屏蔽效果仍需复测。本地键盘可用于密码恢复，测试前请配置恢复快捷键。此功能不提供系统级安全隔离。',
     'Remote protection could not be enabled. All displays remain password-locked.': '远程保护无法启用，所有屏幕继续保持密码锁定。',

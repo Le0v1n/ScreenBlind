@@ -637,7 +637,7 @@ class ScreensaverTab(QScrollArea):
 # About tab
 # ---------------------------------------------------------------------------
 
-APP_VERSION = "1.7.0-test4"
+APP_VERSION = "1.7.0-test5"
 CONTRIBUTOR_NAME = "Lyle"
 CONTRIBUTOR_EMAIL = "zjkljd@163.com"
 WEBSITE_URL = "https://screenblind.cc"
@@ -769,7 +769,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._build_tray()
         self._hotkeys = GlobalHotkeys(QApplication.instance(), {
-            "lock": self._on_lock_clicked, "settings": self.show_normal,
+            "lock": self._on_lock_hotkey, "settings": self.show_normal,
             "recovery": self._request_remote_recovery,
         })
         self._configure_hotkeys(initial=True)
@@ -889,6 +889,12 @@ class MainWindow(QMainWindow):
         self.showNormal()
         self.raise_()
         self.activateWindow()
+
+    def _on_lock_hotkey(self):
+        if self._remote_manager:
+            self._request_remote_recovery()
+        else:
+            self._on_lock_clicked()
 
     def _on_lock_clicked(self):
         if self._remote_manager:
@@ -1127,6 +1133,9 @@ class MainWindow(QMainWindow):
         hint = _label(tr('Click a field and press a combination: Ctrl / Alt + a letter, digit or F1–F11; Shift is optional.\nClear and save to disable an action. Hotkeys cannot unlock displays.'), secondary=True)
         hint.setWordWrap(True)
         layout.addWidget(hint)
+        shared_hint = _label(tr('The lock hotkey opens password recovery in remote mode. Lock and restore may share a hotkey; the tray Lock now action still locks all displays.'), secondary=True)
+        shared_hint.setWordWrap(True)
+        layout.addWidget(shared_hint)
         save = QPushButton(tr('Save hotkeys'))
         save.clicked.connect(self._save_hotkeys)
         layout.addWidget(save)

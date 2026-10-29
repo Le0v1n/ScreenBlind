@@ -59,6 +59,10 @@ class GlobalHotkeys(QAbstractNativeEventFilter):
             if binding is None:
                 continue
             if binding in desired:
+                if {action, desired[binding]} == {'lock', 'recovery'}:
+                    # One native registration and one state-aware lock callback.
+                    desired[binding] = 'lock'
+                    continue
                 raise ValueError(tr('Two actions cannot use the same hotkey.'))
             desired[binding] = action
         # Acquire new combinations first. On conflict the old set remains active.
