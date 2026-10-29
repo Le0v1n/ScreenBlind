@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from PyQt6.QtWidgets import QApplication
 from mouse_hook import MouseHook
-from keyboard_guard import KeyboardPacket, LocalKeyboardBlocker
+from keyboard_guard import KeyboardPacket, LocalKeyboardBlocker, MODIFIERS
 import remote
 from tests.test_remote_privacy import FakeScreen
 
@@ -31,12 +31,12 @@ class LocalKeyboardTests(unittest.TestCase):
 
     def release_chord(self):
         for vk in (ord('L'), 0xA4, 0xA2):
-            self.assertTrue(self.key(vk, up=True))
+            self.assertEqual(self.key(vk, up=True), vk not in MODIFIERS)
 
     def test_all_local_keys_and_releases_are_blocked(self):
         for vk in (ord('A'), 0x5B, 0x09, 0x0D, 0x1B, 0x73, 0xA0):
             self.assertTrue(self.key(vk))
-            self.assertTrue(self.key(vk, up=True))
+            self.assertEqual(self.key(vk, up=True), vk not in MODIFIERS)
         self.recovery.assert_not_called()
 
     def test_local_recovery_chord_is_suppressed_and_notified_once_per_press(self):
@@ -91,7 +91,7 @@ class LocalKeyboardTests(unittest.TestCase):
             self.assertTrue(self.key(modifier))
             self.assertTrue(self.key(0x1B))
             self.assertTrue(self.key(0x1B, up=True))
-            self.assertTrue(self.key(modifier, up=True))
+            self.assertFalse(self.key(modifier, up=True))
 
     def test_forwarded_shift_release_is_delivered_after_recovery_closes(self):
         self.focused.return_value = True
@@ -104,6 +104,24 @@ class LocalKeyboardTests(unittest.TestCase):
         with patch.object(MouseHook, 'start') as install, self.assertRaises(ValueError):
             guard.start()
         install.assert_not_called()
+
+    def test_modifier_pressed_before_hook_still_delivers_release(self):
+        for vk in MODIFIERS:
+            self.assertFalse(self.key(vk, up=True))
+
+    def test_mixed_injected_down_physical_up_cannot_leave_alt_held(self):
+        self.assertFalse(self.key(0xA4, injected=True))
+        self.assertFalse(self.key(0xA4, up=True))
+        self.assertFalse(self.guard._down)
+
+    def test_injected_release_clears_stale_local_modifier_state(self):
+        self.assertTrue(self.key(0xA2))
+        self.assertTrue(self.key(0xA4))
+        self.assertFalse(self.key(0x11, up=True, injected=True))
+        self.assertFalse(self.key(0x12, up=True, injected=True))
+        self.assertFalse(self.guard._down)
+        self.chord()
+        self.recovery.assert_called_once()
 
     def test_native_dispatch_forwarding_and_injection_flag(self):
         guard = self.guard

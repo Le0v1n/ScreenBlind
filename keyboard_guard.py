@@ -55,9 +55,20 @@ class LocalKeyboardBlocker(MouseHook):
         return self._api.CallNextHookEx(self._handle, code, message, address)
 
     def handle_key(self, message, vk, flags):
+        released = message in (0x101, 0x105)
+        if released and vk in MODIFIERS:
+            # A modifier may have gone down before installation, on the secure
+            # desktop, or through UU, then come up through another input path.
+            # Never swallow its release and leave Windows seeing it held.
+            group = MODIFIERS[vk]
+            aliases = {key for key, value in MODIFIERS.items() if value == group}
+            self._down.difference_update(aliases)
+            self._blocked.difference_update(aliases)
+            self._forwarded.difference_update(aliases)
+            return False
         if flags & 0x10:  # LLKHF_INJECTED: distinct from mouse's bit 0.
             return False
-        if message in (0x101, 0x105):
+        if released:
             self._down.discard(vk)
             self._blocked.discard(vk)
             if vk in self._forwarded:
