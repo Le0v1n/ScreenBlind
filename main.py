@@ -63,6 +63,7 @@ from widgets import WheelSafeComboBox, WheelSafeSpinBox
 from remote import RemoteManager
 from remote_ui import RemoteTab, RecoveryDialog
 from input_diagnostics import InputDiagnostics
+from mouse_diagnostics import MouseDiagnostics
 
 
 # ---------------------------------------------------------------------------
@@ -636,7 +637,7 @@ class ScreensaverTab(QScrollArea):
 # About tab
 # ---------------------------------------------------------------------------
 
-APP_VERSION = "1.7.0-test2"
+APP_VERSION = "1.7.0-test3"
 CONTRIBUTOR_NAME = "Lyle"
 CONTRIBUTOR_EMAIL = "zjkljd@163.com"
 WEBSITE_URL = "https://screenblind.cc"
@@ -1132,6 +1133,9 @@ class MainWindow(QMainWindow):
         diagnostic = QPushButton(tr('Remote input diagnostic'))
         diagnostic.clicked.connect(self._show_input_diagnostic)
         layout.addWidget(diagnostic)
+        mouse_diagnostic = QPushButton(tr('Mouse source diagnostic'))
+        mouse_diagnostic.clicked.connect(self._show_mouse_diagnostic)
+        layout.addWidget(mouse_diagnostic)
         self._hotkey_status = _label("", secondary=True)
         self._hotkey_status.setWordWrap(True)
         layout.addWidget(self._hotkey_status)
@@ -1145,6 +1149,11 @@ class MainWindow(QMainWindow):
 
     def _show_input_diagnostic(self):
         dialog = InputDiagnostics(self)
+        dialog.exec()
+        dialog.deleteLater()
+
+    def _show_mouse_diagnostic(self):
+        dialog = MouseDiagnostics(self)
         dialog.exec()
         dialog.deleteLater()
 

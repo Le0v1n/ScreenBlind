@@ -35,6 +35,14 @@ def tr(source, **values):
 
 
 ZH_CN = {
+    'Mouse source diagnostic': '鼠标来源诊断',
+    'Run two separate samples: local mouse only, then phone UU only. Each sample lasts 15 seconds. Move, click and scroll over this window. Input is never blocked. Only event counts and injection flags are kept in memory; no coordinates or key text are collected. Injection flags do not prove the source is UU.': '分两轮测试：先只用本地鼠标，再只用手机 UU。每轮 15 秒，请在本窗口上移动、点击和滚动。不会拦截操作；仅在内存统计事件数量与注入标记，不采集坐标或按键文本。注入标记不能证明输入来自 UU。',
+    'Sample local mouse': '采样本地鼠标',
+    'Sample phone UU': '采样手机 UU',
+    'Stop sample': '停止采样',
+    'Ready': '就绪',
+    'Mouse diagnostic unavailable: {error}': '鼠标诊断不可用：{error}',
+    'Sampling: {seconds}s remaining; {count} events': '采样中：剩余 {seconds} 秒，已收到 {count} 个事件',
     'Lock all displays, including newly connected displays': '锁定全部屏幕（包含新接入的屏幕）',
     '  Remote  ': '  远程模式  ',
     'Remote mode unavailable': '远程模式不可用',
