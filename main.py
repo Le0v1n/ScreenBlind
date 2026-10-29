@@ -637,7 +637,7 @@ class ScreensaverTab(QScrollArea):
 # About tab
 # ---------------------------------------------------------------------------
 
-APP_VERSION = "1.7.0-test3"
+APP_VERSION = "1.7.0-test4"
 CONTRIBUTOR_NAME = "Lyle"
 CONTRIBUTOR_EMAIL = "zjkljd@163.com"
 WEBSITE_URL = "https://screenblind.cc"
@@ -1015,7 +1015,7 @@ class MainWindow(QMainWindow):
     def _remote_failed(self, reason):
         self._remote_to_full_lock()
         self._tray.showMessage(tr('Remote mode unavailable'),
-            tr('Capture exclusion failed. All displays remain password-locked.'))
+            tr('Remote protection could not be enabled. All displays remain password-locked.'))
 
     def _remote_to_full_lock(self):
         manager = self._remote_manager

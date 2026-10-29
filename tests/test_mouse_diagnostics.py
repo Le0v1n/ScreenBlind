@@ -16,7 +16,7 @@ class MouseDiagnosticTests(unittest.TestCase):
         sampler._api = MagicMock()
         sampler._api.CallNextHookEx.return_value = 123
         sampler._handle = 42
-        sampler.collecting = True
+        sampler.active = True
         return sampler
 
     def test_every_flag_combination_is_forwarded_unchanged(self):
@@ -34,7 +34,7 @@ class MouseDiagnosticTests(unittest.TestCase):
     def test_negative_code_and_stopped_sampler_do_not_read_pointer(self):
         sampler = self.sampler()
         self.assertEqual(sampler._dispatch(-1, 0x200, 0), 123)
-        sampler.collecting = False
+        sampler.active = False
         self.assertEqual(sampler._dispatch(0, 0x200, 0), 123)
         self.assertFalse(sampler.counts)
 
@@ -46,15 +46,15 @@ class MouseDiagnosticTests(unittest.TestCase):
         sampler._api.UnhookWindowsHookEx.assert_called_once_with(42)
         self.assertIsNone(sampler._handle)
         self.assertIsNone(sampler._callback)
-        self.assertFalse(sampler.collecting)
+        self.assertFalse(sampler.active)
         sampler.stop()
         sampler._api.UnhookWindowsHookEx.assert_called_once()
 
     def test_timeout_stops_hook_and_preserves_both_labeled_summaries(self):
         dialog = MouseDiagnostics()
         try:
-            with patch.object(dialog.sampler, 'start', side_effect=lambda: setattr(dialog.sampler, 'collecting', True)), \
-                    patch.object(dialog.sampler, 'stop', side_effect=lambda: setattr(dialog.sampler, 'collecting', False)) as stop:
+            with patch.object(dialog.sampler, 'start', side_effect=lambda: setattr(dialog.sampler, 'active', True)), \
+                    patch.object(dialog.sampler, 'stop', side_effect=lambda: setattr(dialog.sampler, 'active', False)) as stop:
                 for phase in ('Sample local mouse', 'Sample phone UU'):
                     dialog.start_sample(phase)
                     self.assertTrue(dialog.timer.isActive())
@@ -77,7 +77,7 @@ class MouseDiagnosticTests(unittest.TestCase):
             dialog.timer.start()
             dialog.done(0)
             self.assertFalse(dialog.timer.isActive())
-            self.assertFalse(dialog.sampler.collecting)
+            self.assertFalse(dialog.sampler.active)
             self.assertFalse(dialog.sampler.counts)
             self.assertEqual(dialog.log.toPlainText(), '')
         finally:

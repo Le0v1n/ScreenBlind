@@ -35,6 +35,9 @@ def tr(source, **values):
 
 
 ZH_CN = {
+    'Block local mouse during remote mode (experimental)': '远程模式下屏蔽本地鼠标（实验性）',
+    'Off by default. Blocks unmarked mouse movement, clicks and scrolling; allows injected input. Source flags were tested with this UU setup; filtering still needs a live test. Local keyboard recovery stays available; configure a recovery hotkey before testing. This is not a system security boundary.': '默认关闭。拦截未标记为注入的鼠标移动、点击和滚轮，保留注入输入。当前 UU 的来源标记已实测，屏蔽效果仍需复测。本地键盘可用于密码恢复，测试前请配置恢复快捷键。此功能不提供系统级安全隔离。',
+    'Remote protection could not be enabled. All displays remain password-locked.': '远程保护无法启用，所有屏幕继续保持密码锁定。',
     'Mouse source diagnostic': '鼠标来源诊断',
     'Run two separate samples: local mouse only, then phone UU only. Each sample lasts 15 seconds. Move, click and scroll over this window. Input is never blocked. Only event counts and injection flags are kept in memory; no coordinates or key text are collected. Injection flags do not prove the source is UU.': '分两轮测试：先只用本地鼠标，再只用手机 UU。每轮 15 秒，请在本窗口上移动、点击和滚动。不会拦截操作；仅在内存统计事件数量与注入标记，不采集坐标或按键文本。注入标记不能证明输入来自 UU。',
     'Sample local mouse': '采样本地鼠标',

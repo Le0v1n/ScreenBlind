@@ -1,6 +1,6 @@
 """Remote allowlist configuration and black-background password recovery."""
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import (QApplication, QDialog, QLabel, QListWidget, QListWidgetItem,
+from PyQt6.QtWidgets import (QApplication, QCheckBox, QDialog, QLabel, QListWidget, QListWidgetItem,
                              QPushButton, QVBoxLayout, QWidget)
 import auth
 import settings
@@ -26,6 +26,13 @@ class RemoteTab(QWidget):
         note = QLabel(tr('UU compatibility awaits a live test. Newly connected displays are denied by default. Exit remote mode with your password before changing this list.'))
         note.setWordWrap(True)
         layout.addWidget(note)
+        self.block_local_mouse = QCheckBox(tr('Block local mouse during remote mode (experimental)'))
+        self.block_local_mouse.setChecked(bool(cfg.get('remote_block_local_mouse', False)))
+        self.block_local_mouse.toggled.connect(self._save_mouse_filter)
+        layout.addWidget(self.block_local_mouse)
+        mouse_note = QLabel(tr('Off by default. Blocks unmarked mouse movement, clicks and scrolling; allows injected input. Source flags were tested with this UU setup; filtering still needs a live test. Local keyboard recovery stays available; configure a recovery hotkey before testing. This is not a system security boundary.'))
+        mouse_note.setWordWrap(True)
+        layout.addWidget(mouse_note)
         self.status = QLabel()
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
@@ -63,8 +70,18 @@ class RemoteTab(QWidget):
     def set_active(self, active):
         self._active = active
         self.screen_list.setEnabled(not active)
+        self.block_local_mouse.setEnabled(not active)
         self.button.setText(tr('Exit remote mode (password required)') if active else tr('Enter remote mode'))
         self.status.setText(tr('Remote mode active · local screens covered') if active else tr('Remote mode is off. It does not start automatically.'))
+
+    def _save_mouse_filter(self, checked):
+        if self._active:
+            self.block_local_mouse.blockSignals(True)
+            self.block_local_mouse.setChecked(bool(self._cfg.get('remote_block_local_mouse', False)))
+            self.block_local_mouse.blockSignals(False)
+            return
+        self._cfg['remote_block_local_mouse'] = checked
+        settings.save(self._cfg)
 
 
 class RecoveryDialog(QDialog):

@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import QApplication, QWidget
 import dpi
 from blind import _force_topmost
 from displays import screen_key
+from mouse_hook import LocalMouseBlocker
 
 
 def foreground_monitor() -> tuple[int, int]:
@@ -128,6 +129,7 @@ class RemoteManager(QObject):
         self._active = False
         self._ready = False
         self._recovery_window = None
+        self._mouse_blocker = LocalMouseBlocker()
         self._overlays: list[PrivacyOverlay] = []
         self._topmost_timer = QTimer(self)
         self._topmost_timer.setInterval(500)
@@ -151,6 +153,12 @@ class RemoteManager(QObject):
         self._topmost_timer.start()
         self._focus_timer.start()
         self._ready = self._replace_covers(screens)
+        if self._ready and self._active and self._cfg.get('remote_block_local_mouse', False):
+            try:
+                self._mouse_blocker.start()
+            except (OSError, RuntimeError):
+                self._ready = False
+                self.failed.emit('Local mouse filtering could not be enabled. Privacy covers remain active.')
         return self._ready
 
     def _replace_covers(self, screens) -> bool:
@@ -237,6 +245,10 @@ class RemoteManager(QObject):
             overlay.deleteLater()
 
     def stop(self):
+        try:
+            self._mouse_blocker.stop()
+        except OSError:
+            pass  # stop() already disabled filtering; retained callback forwards.
         self._topmost_timer.stop()
         self._focus_timer.stop()
         self._active = False
