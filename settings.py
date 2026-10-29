@@ -8,8 +8,10 @@ DEFAULTS: dict = {
     "theme": "dark",
     "lock_hotkey": "",
     "settings_hotkey": "",
+    "remote_recovery_hotkey": "",
     "password_hash": "",
     "locked_screens": [],
+    "lock_all_screens": False,
     "screen_names": {},          # Windows display identifier -> custom label
     "clock_moving": False,
     "clock_style": "classic",

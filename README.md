@@ -21,6 +21,8 @@ Cover the screens you choose — let the others keep showing what's on them.
 
 ## What it does
 
+The v1.7.0 development build adds identity-based display selection, automatic topology updates, an opt-in all-displays lock policy, standard password/IME editing, and password-protected remote privacy mode. Remote mode is off on startup, and its recovery hotkey is empty by default. **Live UU mobile input and capture compatibility remain pending; v1.6.4 is still the latest stable release.** See the [acceptance checklist](docs/superpowers/plans/2026-10-29-v1.7.0.md).
+
 ScreenBlind lets you lock **individual monitors** on a multi-display Windows
 setup. The locked screens go dark and require a password to wake — the
 unlocked ones stay **visible** and keep displaying their content, so a

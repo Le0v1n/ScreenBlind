@@ -134,6 +134,8 @@ class BlurTests(unittest.TestCase):
             blurred.assert_called_once()
             clock.assert_called()
             prompt.assert_called_once()
+            self.assertFalse(clock.call_args.args[0].isActive(),
+                             'A paint frame must finish before retained arguments are collected')
             self.state.hide_password_input()
             self.overlay.grab()
             self.assertEqual(blurred.call_count, 1)

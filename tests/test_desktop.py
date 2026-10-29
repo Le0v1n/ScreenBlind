@@ -112,7 +112,7 @@ class WindowTests(unittest.TestCase):
         self.assertFalse(self.window._startup_cb.isChecked())
         for edit in self.window._shortcut_edits.values():
             self.assertTrue(edit.keySequence().isEmpty())
-        self.window._hotkeys.configure.assert_called_once_with({'lock': '', 'settings': ''})
+        self.window._hotkeys.configure.assert_called_once_with({'lock': '', 'settings': '', 'recovery': ''})
 
     def test_language_switch_updates_ui_and_tray_and_preserves_drafts(self):
         w = self.window
@@ -477,7 +477,7 @@ class LanguageTests(unittest.TestCase):
 
     def test_all_application_strings_have_a_chinese_translation(self):
         root = Path(__file__).resolve().parents[1]
-        for filename in ('main.py', 'blind.py', 'animations.py', 'hotkeys.py', 'instance.py', 'displays.py', 'clocks.py'):
+        for filename in ('main.py', 'blind.py', 'animations.py', 'hotkeys.py', 'instance.py', 'displays.py', 'clocks.py', 'remote_ui.py', 'input_diagnostics.py'):
             for node in ast.walk(ast.parse((root / filename).read_text(encoding='utf-8'))):
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'tr':
                     self.assertIsInstance(node.args[0], ast.Constant)

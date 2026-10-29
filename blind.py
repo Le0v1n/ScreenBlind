@@ -32,8 +32,9 @@ from PyQt6.QtWidgets import QApplication, QWidget, QGraphicsScene, QGraphicsBlur
 
 import animations as anim_module
 import dpi
-from displays import display_name
+from displays import display_name, screen_key, selected_screen_indices
 from clocks import clock_bounds, draw_clock
+from widgets import PasswordEdit
 from auth import verify_password
 
 
@@ -61,6 +62,8 @@ def _set_cursor_pos(x: int, y: int) -> None:
 
 
 def _force_topmost(hwnd: int, x: int, y: int, w: int, h: int) -> None:
+    if not isinstance(hwnd, ctypes.c_void_p):
+        hwnd = ctypes.c_void_p(hwnd)
     HWND_TOPMOST = ctypes.c_void_p(-1)
     SWP_NOACTIVATE = 0x0010
     ctypes.windll.user32.SetWindowPos(hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE)
@@ -335,6 +338,16 @@ class BlindState(QObject):
         self.updated.emit()
         self._try_unlock()
 
+    def set_password_text(self, text: str):
+        """One committed editor value, never an appended IME preedit string."""
+        if self._unlock_emitted or not self.showing_password:
+            return
+        self.password_buffer = text
+        self._wrong = False
+        self.start_idle_timer()
+        self.updated.emit()
+        self._try_unlock()
+
     def handle_backspace(self):
         if self._unlock_emitted:
             return
@@ -413,11 +426,19 @@ class BlindOverlay(QWidget):
         self._blur_pixmap = None
 
         self._setup_window()
+        self._password_edit = PasswordEdit(self)
+        self._password_edit.setPlaceholderText(tr('Enter password'))
+        self._password_edit.setStyleSheet('QLineEdit { background: transparent; border: none; color: white; font-size: 22px; padding: 0; selection-background-color: #6366f1; }')
+        self._password_edit.textEdited.connect(state.set_password_text)
+        self._password_edit.returnPressed.connect(state.attempt_unlock)
+        self._password_edit.cancelled.connect(state.hide_password_input)
+        self._password_edit.hide()
         self._setup_animation(slideshow)
         self._setup_timers()
 
         state.updated.connect(self.update)
         state.updated.connect(self._sync_cursor)
+        state.updated.connect(self._sync_password_edit)
 
     # -- setup ---------------------------------------------------------------
 
@@ -430,6 +451,7 @@ class BlindOverlay(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
         self.setGeometry(self._geo)
         self.setMouseTracking(True)
+        self.setAttribute(Qt.WidgetAttribute.WA_InputMethodEnabled, True)
         self.setCursor(Qt.CursorShape.ArrowCursor)
 
     def _setup_animation(self, slideshow=None):
@@ -494,31 +516,51 @@ class BlindOverlay(QWidget):
         else:
             self.setCursor(Qt.CursorShape.ArrowCursor)
 
+    def _sync_password_edit(self):
+        edit = self._password_edit
+        if edit.text() != self._state.password_buffer:
+            edit.blockSignals(True)
+            edit.setText(self._state.password_buffer)
+            edit.setCursorPosition(len(edit.text()))
+            edit.blockSignals(False)
+        width = min(380, max(100, self.width() - 32))
+        edit.setGeometry((self.width() - width) // 2 + 18 + self._state.shake_offset,
+                         int(self.height() * 0.60) + 22, width - 36, 52)
+        edit.setVisible(self._state.showing_password)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, '_password_edit'):
+            self._sync_password_edit()
+
     # -- painting ------------------------------------------------------------
 
     def paintEvent(self, _event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rect = self.rect()
+        try:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            rect = self.rect()
 
-        if self._state.showing_password:
-            self._draw_blurred_background(painter, rect)
-        else:
-            self._draw_background(painter, rect)
+            if self._state.showing_password:
+                self._draw_blurred_background(painter, rect)
+            else:
+                self._draw_background(painter, rect)
 
-        # Clock and input stay sharp above the blurred background.
-        self._draw_clock(painter, rect)
-        if self._screen_name:
-            painter.setFont(QFont('Microsoft YaHei UI', 12))
-            painter.setPen(QColor(235, 235, 255, 210))
-            name = painter.fontMetrics().elidedText(self._screen_name, Qt.TextElideMode.ElideRight, max(0, rect.width() - 48))
-            painter.drawText(rect.adjusted(24, 20, -24, -20),
-                             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, name)
+            # Clock and input stay sharp above the blurred background.
+            self._draw_clock(painter, rect)
+            if self._screen_name:
+                painter.setFont(QFont('Microsoft YaHei UI', 12))
+                painter.setPen(QColor(235, 235, 255, 210))
+                name = painter.fontMetrics().elidedText(self._screen_name, Qt.TextElideMode.ElideRight, max(0, rect.width() - 48))
+                painter.drawText(rect.adjusted(24, 20, -24, -20),
+                                 Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, name)
 
-        if self._state.showing_password:
-            self._draw_password_prompt(painter, rect)
-        elif not self._state.in_screensaver:
-            self._draw_hint(painter, rect)
+            if self._state.showing_password:
+                self._draw_password_prompt(painter, rect)
+            elif not self._state.in_screensaver:
+                self._draw_hint(painter, rect)
+        finally:
+            painter.end()
 
     def _draw_background(self, painter, rect):
         # Background gradient — hue rotates slowly between random dark tones
@@ -593,35 +635,7 @@ class BlindOverlay(QWidget):
         painter.setPen(QPen(border_color, 1.5))
         painter.drawRoundedRect(px, py, pw, ph, 14, 14)
 
-        # Password dots
-        n = len(self._state.password_buffer)
-        dot_r = 6
-        spacing = 20
-        dy = py + 40
-        if n > 0:
-            total = n * dot_r * 2 + (n - 1) * (spacing - dot_r * 2)
-            dx = px + (pw - total) // 2
-            painter.setPen(Qt.PenStyle.NoPen)
-            for i in range(n):
-                painter.setBrush(QColor(255, 255, 255, 230))
-                painter.drawEllipse(dx + i * spacing, dy, dot_r * 2, dot_r * 2)
-            # Blinking cursor after last dot
-            if self._state.cursor_visible:
-                cursor_x = dx + (n - 1) * spacing + dot_r * 2 + 6
-                painter.fillRect(cursor_x, dy - 3, 2, dot_r * 2 + 6, QColor(255, 255, 255, 210))
-        else:
-            font = QFont("Microsoft YaHei UI", 14)
-            font.setWeight(QFont.Weight.Light)
-            painter.setFont(font)
-            painter.setPen(QColor(140, 140, 180))
-            painter.drawText(
-                QRect(px, py + 28, pw, 40),
-                Qt.AlignmentFlag.AlignCenter,
-                tr('Enter password'),
-            )
-            # Blinking cursor centered in placeholder area
-            if self._state.cursor_visible:
-                painter.fillRect(px + pw // 2, py + 32, 2, 22, QColor(200, 200, 220, 200))
+        # Password editing is handled by the standard child QLineEdit.
 
         # Status/hint line
         font2 = QFont("Microsoft YaHei UI", 11)
@@ -659,19 +673,19 @@ class BlindOverlay(QWidget):
             return
         if not self._state.showing_password:
             self._state.show_password_input()
+            self._password_edit.wake_key = event.key()
+            self._password_edit.setFocus()
             # The first key only dismisses the clock surface, regardless of text.
             return
-        key = event.key()
-        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            self._state.attempt_unlock()
-        elif key == Qt.Key.Key_Escape:
-            self._state.hide_password_input()
-        elif key == Qt.Key.Key_Backspace:
-            self._state.handle_backspace()
-        else:
-            text = event.text()
-            if text and text.isprintable():
-                self._state.handle_char(text)
+        self._password_edit.keyPressEvent(event)
+
+    def inputMethodEvent(self, event):
+        if not self._state.showing_password:
+            self._state.show_password_input()
+            self._password_edit.setFocus()
+            event.accept()
+            return
+        self._password_edit.inputMethodEvent(event)
 
     def mouseMoveEvent(self, _event):
         self._state.on_mouse_move()
@@ -680,6 +694,7 @@ class BlindOverlay(QWidget):
         self.activateWindow()
         self.setFocus()
         self._state.show_password_input()
+        self._password_edit.setFocus()
 
     def closeEvent(self, event):
         # The overlay must never close on its own (Alt+F4, WM_CLOSE, etc.).
@@ -703,6 +718,8 @@ class BlindManager(QObject):
         self._overlays: list[BlindOverlay] = []
         self._state: BlindState | None = None
         self._locked_rects: list[QRect] = []
+        self._overlays_by_key = {}
+        self._shared_slideshow = None
 
         # Keep-on-top enforcer (taskbar can briefly appear above on some systems)
         self._topmost_timer = QTimer(self)
@@ -717,57 +734,69 @@ class BlindManager(QObject):
         self._cursor_guard.setInterval(10)
         self._cursor_guard.timeout.connect(self._enforce_cursor_clip)
 
-    def lock(self):
-        if self._overlays:
+    def lock(self, allow_empty=False):
+        if self._state is not None:
             return True
-
         self._state = BlindState(self._cfg, self)
         self._state.unlocked.connect(self._on_unlocked)
         self._state.updated.connect(self._on_state_update)
-
-        screens = QApplication.screens()
-        locked_indices: list[int] = self._cfg.get("locked_screens", [])
-        clip_rects: list[QRect] = []
-        shared_slideshow = None
-
-        for idx in locked_indices:
-            if not 0 <= idx < len(screens):
-                continue
-            geo = screens[idx].geometry()
-            overlay = BlindOverlay(geo, self._state, self._cfg,
-                                   screen_name=display_name(screens[idx], idx, self._cfg),
-                                   slideshow=shared_slideshow)
-            if self._cfg.get('screensaver_type') == 'slideshow' and self._cfg.get('slideshow_sync', True):
-                shared_slideshow = overlay._animation
-            overlay.show()
-            # show() creates the native window, so Windows can now tell us
-            # which monitor it landed on and how big that monitor really is.
-            overlay.sync_native_geometry()
-            overlay.force_topmost()
-            self._overlays.append(overlay)
-            clip_rects.append(overlay.native_rect)
-
-        if not self._overlays:
+        self.reconcile_screens()
+        if not self._overlays and not allow_empty:
             self._state.deleteLater()
             self._state = None
             return False
-
-        # Trap mouse inside the bounding rect of all locked screens.
-        # Physical pixels throughout — that is the space ClipCursor and
-        # GetCursorPos work in.
-        self._locked_rects = clip_rects
-        self._apply_cursor_clip()
-
         self._state.start_idle_timer()
         self._topmost_timer.start()
         self._cursor_guard.start()
         _install_kb_hook()
-
-        # Give the first overlay keyboard focus
         if self._overlays:
             self._overlays[0].activateWindow()
             self._overlays[0].setFocus()
         return True
+
+    def reconcile_screens(self):
+        if self._state is None:
+            return
+        screens = QApplication.screens()
+        targets = [(screen_key(screens[i]), i, screens[i])
+                   for i in selected_screen_indices(self._cfg, screens)]
+        current = {}
+        # Add coverage before removing obsolete windows. The session survives zero screens.
+        for key, idx, screen in targets:
+            geo = screen.geometry()
+            overlay = self._overlays_by_key.get(key)
+            if overlay is None:
+                overlay = BlindOverlay(geo, self._state, self._cfg,
+                                       screen_name=display_name(screen, idx, self._cfg),
+                                       slideshow=self._shared_slideshow)
+                if self._cfg.get('screensaver_type') == 'slideshow' and self._cfg.get('slideshow_sync', True):
+                    self._shared_slideshow = overlay._animation
+                    self._shared_slideshow.setParent(self)
+                overlay.show()
+                overlay._sync_password_edit()
+            else:
+                overlay.setGeometry(geo)
+                overlay._screen_name = display_name(screen, idx, self._cfg)
+            overlay.sync_native_geometry()
+            overlay.force_topmost()
+            current[key] = overlay
+        for key, overlay in self._overlays_by_key.items():
+            if key not in current:
+                if overlay._animation is not self._shared_slideshow and overlay._animation:
+                    overlay._animation.stop()
+                overlay._allow_close = True
+                overlay.close()
+                overlay.deleteLater()
+        self._overlays_by_key = current
+        self._overlays = list(current.values())
+        self._locked_rects = [overlay.native_rect for overlay in self._overlays]
+        if self._locked_rects:
+            self._apply_cursor_clip()
+        else:
+            _release_cursor()
+            if self._shared_slideshow:
+                self._shared_slideshow.stop()
+        self._on_state_update()
 
     def _apply_cursor_clip(self):
         if not self._locked_rects:
@@ -834,6 +863,11 @@ class BlindManager(QObject):
             o.close()
             o.deleteLater()
         self._overlays.clear()
+        self._overlays_by_key.clear()
+        if self._shared_slideshow:
+            self._shared_slideshow.stop()
+            self._shared_slideshow.deleteLater()
+            self._shared_slideshow = None
         if self._state:
             self._state.deleteLater()
         self._state = None

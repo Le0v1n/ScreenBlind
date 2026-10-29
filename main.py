@@ -8,6 +8,8 @@ from __future__ import annotations
 from i18n import tr
 
 import sys
+import copy
+import weakref
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer, QUrl, QRectF
@@ -24,6 +26,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QDialog,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -54,9 +57,12 @@ from hotkeys import GlobalHotkeys
 from themes import apply_theme
 from instance import InstanceGuard
 from i18n import configure_language
-from displays import display_name, screen_key
+from displays import display_name, screen_key, migrate_display_settings, selected_screen_indices
 from clocks import CLOCK_STYLES, draw_clock
 from widgets import WheelSafeComboBox, WheelSafeSpinBox
+from remote import RemoteManager
+from remote_ui import RemoteTab, RecoveryDialog
+from input_diagnostics import InputDiagnostics
 
 
 # ---------------------------------------------------------------------------
@@ -195,6 +201,10 @@ class MonitorsTab(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
 
         layout.addWidget(_label(tr('Select displays to lock:')))
+        self._lock_all = QCheckBox(tr('Lock all displays, including newly connected displays'))
+        self._lock_all.setChecked(cfg.get('lock_all_screens', False))
+        self._lock_all.toggled.connect(self._save_lock_all)
+        layout.addWidget(self._lock_all)
 
         self._list = QListWidget()
         self._list.setSpacing(2)
@@ -240,11 +250,13 @@ class MonitorsTab(QWidget):
         self._identify_overlays.clear()
 
     def refresh(self):
+        screens = QApplication.screens()
+        if migrate_display_settings(self._cfg, screens, QApplication.primaryScreen()):
+            cfg_mod.save(self._cfg)
         self._list.blockSignals(True)
         self._list.clear()
         self._items.clear()
-        screens = QApplication.screens()
-        locked = set(self._cfg.get("locked_screens", []))
+        locked = set(selected_screen_indices(self._cfg, screens))
         primary = QApplication.primaryScreen()
 
         for i, screen in enumerate(screens):
@@ -258,6 +270,8 @@ class MonitorsTab(QWidget):
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, screen_key(screen))
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            if self._cfg.get('lock_all_screens', False):
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
             item.setCheckState(
                 Qt.CheckState.Checked if i in locked else Qt.CheckState.Unchecked
             )
@@ -284,16 +298,31 @@ class MonitorsTab(QWidget):
             names[key] = name.strip()
         else:
             names.pop(key, None)
+            # Remove a migrated source-name alias as well as the stable key.
+            for screen in QApplication.screens():
+                if screen_key(screen) == key:
+                    names.pop(screen.name(), None)
         self._cfg['screen_names'] = names
         cfg_mod.save(self._cfg)
         self.refresh()
 
     def _on_change(self, _item):
+        if self._cfg.get('lock_all_screens', False):
+            return
+        present = {item.data(Qt.ItemDataRole.UserRole) for item, _ in self._items}
+        offline = [key for key in self._cfg.get('locked_screen_ids', []) if key not in present]
+        self._cfg['locked_screen_ids'] = offline + [item.data(Qt.ItemDataRole.UserRole)
+            for item, _ in self._items if item.checkState() == Qt.CheckState.Checked]
         self._cfg["locked_screens"] = [
             idx for item, idx in self._items
             if item.checkState() == Qt.CheckState.Checked
         ]
         cfg_mod.save(self._cfg)
+
+    def _save_lock_all(self, enabled):
+        self._cfg['lock_all_screens'] = enabled
+        cfg_mod.save(self._cfg)
+        self.refresh()
 
     def selected_indices(self) -> list[int]:
         return [idx for item, idx in self._items
@@ -607,7 +636,7 @@ class ScreensaverTab(QScrollArea):
 # About tab
 # ---------------------------------------------------------------------------
 
-APP_VERSION = "1.6.4"
+APP_VERSION = "1.7.0"
 CONTRIBUTOR_NAME = "Lyle"
 CONTRIBUTOR_EMAIL = "zjkljd@163.com"
 WEBSITE_URL = "https://screenblind.cc"
@@ -725,6 +754,12 @@ class MainWindow(QMainWindow):
         self._cfg = cfg_mod.load()
         configure_language(QApplication.instance(), self._cfg.get("language", "system"))
         self._blind_manager: BlindManager | None = None
+        self._remote_manager = None
+        self._recovery_dialog = None
+        self._watched_screens = weakref.WeakSet()
+        self._screen_update_timer = QTimer(self)
+        self._screen_update_timer.setSingleShot(True)
+        self._screen_update_timer.timeout.connect(self._reconcile_screens)
 
         self.setWindowTitle(f"ScreenBlind v{APP_VERSION}")
         self.setMinimumSize(660, 640)
@@ -734,9 +769,35 @@ class MainWindow(QMainWindow):
         self._build_tray()
         self._hotkeys = GlobalHotkeys(QApplication.instance(), {
             "lock": self._on_lock_clicked, "settings": self.show_normal,
+            "recovery": self._request_remote_recovery,
         })
         self._configure_hotkeys(initial=True)
         apply_theme(QApplication.instance(), self._cfg.get("theme", "dark"))
+        app = QApplication.instance()
+        app.screenAdded.connect(self._watch_screen)
+        app.screenRemoved.connect(self._queue_screen_update)
+        for screen in app.screens():
+            self._watch_screen(screen)
+
+    def _watch_screen(self, screen):
+        if screen not in self._watched_screens:
+            self._watched_screens.add(screen)
+            for signal_name in ('geometryChanged', 'logicalDotsPerInchChanged', 'physicalDotsPerInchChanged'):
+                signal = getattr(screen, signal_name, None)
+                if signal is not None:
+                    signal.connect(self._queue_screen_update)
+        self._queue_screen_update()
+
+    def _queue_screen_update(self, *args):
+        self._screen_update_timer.start(0)
+
+    def _reconcile_screens(self):
+        self._monitors_tab.refresh()
+        self._remote_tab.refresh()
+        if self._blind_manager:
+            self._blind_manager.reconcile_screens()
+        if self._remote_manager:
+            self._remote_manager.reconcile_screens()
 
     # -- UI ------------------------------------------------------------------
 
@@ -774,6 +835,9 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(self._screensaver_tab, tr('  Screensaver  '))
         self._general_tab = self._build_general_tab()
         self._tabs.addTab(self._general_tab, tr('  General  '))
+        self._remote_tab = RemoteTab(self._cfg)
+        self._remote_tab.toggleRequested.connect(self._toggle_remote)
+        self._tabs.addTab(self._remote_tab, tr('  Remote  '))
         self._tabs.addTab(self._about_scroll, tr('  About  '))
         root.addWidget(self._tabs, 1)
 
@@ -802,6 +866,7 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         self._settings_action = menu.addAction(tr('Open settings'), self.show_normal)
         self._tray_lock_action = menu.addAction(tr('Lock now'), self._on_lock_clicked)
+        self._remote_action = menu.addAction(tr('Exit remote mode (password required)') if self._remote_manager else tr('Enter remote mode'), self._toggle_remote)
         menu.addSeparator()
         self._exit_action = menu.addAction(tr('Exit'), self._exit_app)
         self._tray.setContextMenu(menu)
@@ -818,11 +883,16 @@ class MainWindow(QMainWindow):
     def show_normal(self):
         if self._blind_manager:
             return
+        if self._remote_manager and not self._request_remote_recovery():
+            return
         self.showNormal()
         self.raise_()
         self.activateWindow()
 
     def _on_lock_clicked(self):
+        if self._remote_manager:
+            self._remote_to_full_lock()
+            return
         if self._blind_manager or getattr(self, "_lock_pending", False):
             return
         focus = QApplication.focusWidget()
@@ -880,6 +950,8 @@ class MainWindow(QMainWindow):
         self.hide()
 
     def _exit_app(self):
+        if self._remote_manager and not self._request_remote_recovery():
+            return
         if self._blind_manager:
             # Don't allow exit while locked — require password first
             QMessageBox.information(
@@ -901,7 +973,99 @@ class MainWindow(QMainWindow):
     def _set_locked_actions(self, locked):
         for action in (self._settings_action, self._tray_lock_action, self._exit_action):
             action.setEnabled(not locked)
+        self._remote_action.setEnabled(not locked)
+        self._remote_tab.set_active(bool(self._remote_manager))
+        if self._remote_manager:
+            self._tray.setToolTip(tr('Remote mode active · local screens covered'))
+            return
         self._tray.setToolTip(tr('ScreenBlind · Locked; enter your password to unlock') if locked else tr("ScreenBlind v{version} · Running in the tray", version=APP_VERSION))
+
+    def _toggle_remote(self):
+        if self._blind_manager:
+            return
+        if self._remote_manager:
+            self._request_remote_recovery()
+            return
+        if not self._cfg.get('password_hash'):
+            self.show_normal()
+            QMessageBox.warning(self, tr('No password'), tr('Set a password in the Security tab before locking.'))
+            self._tabs.setCurrentIndex(1)
+            return
+        current = {screen_key(s) for s in QApplication.screens()}
+        if not current.intersection(self._cfg.get('remote_allowed_screen_ids', [])):
+            QMessageBox.warning(self, tr('No displays selected'), tr('Select at least one connected display for remote use.'))
+            return
+        manager = RemoteManager(self._cfg, self)
+        self._remote_manager = manager
+        manager.failed.connect(self._remote_failed)
+        manager.fallbackRequested.connect(self._remote_to_full_lock)
+        manager.recoveryRequested.connect(self._request_remote_recovery)
+        if manager.start() and self._remote_manager is manager:
+            self.hide()
+            manager._guard_denied_foreground()
+            self._refresh_tray_menu()
+        elif self._remote_manager is manager:
+            if manager.active:
+                self._remote_to_full_lock()
+            else:
+                manager.deleteLater()
+                self._remote_manager = None
+
+    def _remote_failed(self, reason):
+        self._remote_to_full_lock()
+        self._tray.showMessage(tr('Remote mode unavailable'),
+            tr('Capture exclusion failed. All displays remain password-locked.'))
+
+    def _remote_to_full_lock(self):
+        manager = self._remote_manager
+        if manager is None:
+            return
+        if self._recovery_dialog:
+            self._recovery_dialog.reject()
+        cfg = copy.deepcopy(self._cfg)
+        cfg['lock_all_screens'] = True
+        normal = BlindManager(cfg, self)
+        normal.unlocked.connect(self._on_unlocked)
+        if normal.lock(allow_empty=True):
+            self._blind_manager = normal
+            manager.stop()
+            manager.deleteLater()
+            self._remote_manager = None
+            self.hide()
+            self._refresh_tray_menu()
+        else:
+            normal.deleteLater()  # Leave remote protection in place if fallback fails.
+
+    def _request_remote_recovery(self):
+        manager = self._remote_manager
+        if manager is None:
+            return False
+        if self._recovery_dialog:
+            self._recovery_dialog.raise_()
+            self._recovery_dialog.activateWindow()
+            return False
+        dialog = RecoveryDialog(self._cfg, self)
+        self._recovery_dialog = dialog
+        screens = QApplication.screens()
+        allowed = set(self._cfg.get('remote_allowed_screen_ids', []))
+        screen = next((s for s in screens if screen_key(s) in allowed), QApplication.primaryScreen())
+        if screen is not None:
+            dialog.setGeometry(screen.geometry())
+        # Masks remain installed throughout authentication.
+        dialog.show()
+        dialog.password.setFocus()
+        manager.set_recovery_window(dialog)
+        accepted = dialog.exec() == QDialog.DialogCode.Accepted
+        self._recovery_dialog = None
+        if self._remote_manager is manager:
+            manager.set_recovery_window(None)
+            if accepted:
+                manager.stop()
+                manager.deleteLater()
+                self._remote_manager = None
+                self._refresh_tray_menu()
+        dialog.deleteLater()
+        return accepted and self._remote_manager is None and self._blind_manager is None
 
     def _build_general_tab(self):
         scroll = QScrollArea()
@@ -944,7 +1108,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(_label(tr('Global hotkeys · Active while in the tray')))
         self._shortcut_edits = {}
         for action, label, key in (("lock", tr('Lock now'), "lock_hotkey"),
-                                   ("settings", tr('Open settings'), "settings_hotkey")):
+                                   ("settings", tr('Open settings'), "settings_hotkey"),
+                                   ("recovery", tr('Restore local displays'), "remote_recovery_hotkey")):
             row = QHBoxLayout()
             row.addWidget(_label(label))
             edit = QKeySequenceEdit(QKeySequence(self._cfg[key]))
@@ -964,6 +1129,9 @@ class MainWindow(QMainWindow):
         save = QPushButton(tr('Save hotkeys'))
         save.clicked.connect(self._save_hotkeys)
         layout.addWidget(save)
+        diagnostic = QPushButton(tr('Remote input diagnostic'))
+        diagnostic.clicked.connect(self._show_input_diagnostic)
+        layout.addWidget(diagnostic)
         self._hotkey_status = _label("", secondary=True)
         self._hotkey_status.setWordWrap(True)
         layout.addWidget(self._hotkey_status)
@@ -974,6 +1142,11 @@ class MainWindow(QMainWindow):
         layout.addStretch()
         scroll.setWidget(tab)
         return scroll
+
+    def _show_input_diagnostic(self):
+        dialog = InputDiagnostics(self)
+        dialog.exec()
+        dialog.deleteLater()
 
     def _change_language(self):
         if self._blind_manager:
@@ -1023,8 +1196,9 @@ class MainWindow(QMainWindow):
     def _configure_hotkeys(self, initial=False):
         try:
             self._hotkeys.configure({"lock": self._cfg["lock_hotkey"],
-                                     "settings": self._cfg["settings_hotkey"]})
-            self._hotkey_status.setText(tr('Hotkeys are active.') if any((self._cfg["lock_hotkey"], self._cfg["settings_hotkey"])) else tr('All hotkeys are disabled.'))
+                                     "settings": self._cfg["settings_hotkey"],
+                                     "recovery": self._cfg['remote_recovery_hotkey']})
+            self._hotkey_status.setText(tr('Hotkeys are active.') if any((self._cfg["lock_hotkey"], self._cfg["settings_hotkey"], self._cfg['remote_recovery_hotkey'])) else tr('All hotkeys are disabled.'))
         except ValueError as exc:
             self._hotkey_status.setText(str(exc) + tr(' Change the combination and save. The tray menu is still available.'))
             if initial:
@@ -1039,6 +1213,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, tr('Hotkeys were not saved'), str(exc) + tr('\nYour previous hotkeys remain active.'))
             return
         self._cfg.update(lock_hotkey=shortcuts["lock"], settings_hotkey=shortcuts["settings"])
+        self._cfg['remote_recovery_hotkey'] = shortcuts['recovery']
         cfg_mod.save(self._cfg)
         self._hotkey_status.setText(tr('Hotkeys saved and applied.'))
 
