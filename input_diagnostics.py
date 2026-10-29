@@ -2,9 +2,10 @@
 from PyQt6.QtWidgets import QDialog, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QVBoxLayout
 from PyQt6.QtCore import Qt
 from i18n import tr
+from widgets import UnicodeLineEdit
 
 
-class InputProbe(QLineEdit):
+class InputProbe(UnicodeLineEdit):
     def __init__(self, report, legacy=False):
         super().__init__()
         self._report, self._legacy = report, legacy
@@ -12,7 +13,8 @@ class InputProbe(QLineEdit):
 
     def keyPressEvent(self, event):
         self._report(f'key={event.key():x} scan={event.nativeScanCode()} native={event.nativeVirtualKey()} '
-                     f'repeat={event.isAutoRepeat()} count={event.count()} units={len(event.text())}')
+                     f'repeat={event.isAutoRepeat()} count={event.count()} units={len(event.text())} '
+                     f'mods={event.modifiers().value:x}')
         if self._legacy:
             if event.key() == Qt.Key.Key_Backspace:
                 self.setText(self.text()[:-1])

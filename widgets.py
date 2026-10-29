@@ -1,5 +1,6 @@
 """Settings inputs that let wheel events scroll the page instead of changing values."""
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import QComboBox, QSpinBox, QLineEdit
 
 
@@ -16,7 +17,22 @@ class WheelSafeSpinBox(QSpinBox):
         event.ignore()
 
 
-class PasswordEdit(QLineEdit):
+class UnicodeLineEdit(QLineEdit):
+    def keyPressEvent(self, event):
+        original = event
+        # KEYEVENTF_UNICODE sends VK_PACKET text, not a physical shortcut key.
+        # Remote mobile IMEs can leave Ctrl/Alt held while submitting that text.
+        shortcuts = (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier |
+                     Qt.KeyboardModifier.MetaModifier)
+        if event.nativeVirtualKey() == 0xE7 and event.text().isprintable() and event.modifiers() & shortcuts:
+            event = QKeyEvent(event.type(), event.key(), event.modifiers() & ~shortcuts,
+                              event.nativeScanCode(), event.nativeVirtualKey(), event.nativeModifiers(),
+                              event.text(), event.isAutoRepeat(), event.count())
+        super().keyPressEvent(event)
+        original.setAccepted(event.isAccepted())
+
+
+class PasswordEdit(UnicodeLineEdit):
     cancelled = pyqtSignal()
 
     def __init__(self, parent=None):
